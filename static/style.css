@@ -135,4 +135,13 @@ textarea.link-input { min-height:105px; }
 #result-content { min-width:0; }
 #result-content .explanation { line-height:1.7; }
 .bottom-nav { position:relative; bottom:auto; }
+.secret-result { text-align:center; padding:28px 20px; border-radius:28px; background:linear-gradient(145deg,#eee1ff,#fff0cf); border:1px solid #e5cef5; overflow-wrap:anywhere; }
+.secret-result>.eyebrow { color:var(--purple); }
+.secret-result h2 { font-size:17px; line-height:1.5; margin:16px 0 0; }
+.secret-result img { display:block; margin:12px auto 0; object-fit:contain; }
+.secret-percent { display:block; font-size:clamp(48px,15vw,70px); line-height:1.1; letter-spacing:-3px; color:var(--purple); }
+.secret-result h3 { font-size:26px; line-height:1.2; margin:18px 0 12px; }
+.secret-result p { font-size:15px; line-height:1.7; }
+.secret-result small { display:block; color:var(--muted); font-size:11px; line-height:1.5; margin-top:20px; }
+.secret-result .secret-dedication { font-size:17px; font-weight:700; margin:20px 0 0; }
 @media(prefers-reduced-motion:reduce) { *,*::before,*::after { animation:none !important; transition:none !important; scroll-behavior:auto !important; } }

@@ -105,12 +105,21 @@ function dateLabel(seconds) {
 
 function renderCheck(item) {
   const running = item.status === "running";
+  const secret = item.status === "done" && item.result?.easterEgg === "nazar";
+  $("secret-result").hidden = !secret;
   $("loading-state").hidden = !running;
-  $("result-content").hidden = item.status !== "done";
+  $("result-content").hidden = item.status !== "done" || secret;
   $("result-error").hidden = item.status !== "failed";
   $("new-check").hidden = running;
   $("poll-error").hidden = true;
   $("resume-poll").hidden = true;
+  if (secret) {
+    $("secret-question").textContent = item.title;
+    const joke = item.result.joke || nazarJoke(item.title);
+    $("secret-title").textContent = joke.title;
+    $("secret-answer").textContent = joke.answer;
+    return;
+  }
   if (running) return;
   if (item.status === "failed") {
     $("result-error-text").textContent = item.error || "Спробуй ще раз пізніше.";
@@ -262,6 +271,15 @@ async function submit(event) {
   if (state.kind === "photo" && !state.photo) return formError("Спочатку обери фото.");
   const item = {id:requestId(), kind:state.kind, title:text.replace(/\s+/g," ").slice(0,100) || "Перевірка фото",
     created_at:Math.floor(Date.now()/1000), status:"running", result:null, error:null};
+  if (state.kind === "text" && isNazarEasterEgg(text)) {
+    item.status = "done";
+    item.result = {easterEgg:"nazar", joke:nazarJoke(text), label:"Секретний розділ ✦", score:null, limited:false, segments:[], sources:[]};
+    state.current = item;
+    saveHistory(item);
+    showPage("result");
+    renderCheck(item);
+    return;
+  }
   const form = new FormData();
   form.append("kind", state.kind); form.append("text", text);
   if (state.kind === "photo") form.append("photo", state.photo);
@@ -281,6 +299,31 @@ async function submit(event) {
   if (state.page === "result") renderCheck(item);
   else if (state.page === "history") loadHistory();
   else connection("Перевірка завершилась. Результат доступний в історії.");
+}
+
+function isNazarEasterEgg(text) {
+  const words = text.normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]+/gu," ").trim().split(/\s+/);
+  const name = words.some((word) => /^назар(?:а|ом|у)?$/.test(word));
+  const surname = words.some((word) => /^радков(?:ськ(?:ий|ого|ому|им)|ск(?:ий|ого|ому|им))$/.test(word));
+  return name && surname;
+}
+
+function nazarJoke(text) {
+  const query = text.normalize("NFKC").toLowerCase();
+  const king = "Так, він цар і бог. ";
+  if (/пр[еи]зидент/.test(query)) {
+    if (/світ|мир[ау]?\s|мира|планет/.test(query + " ")) return {title:"Президент світу? Це лише початок 👑", answer:king + "У секретному всесвіті Радковського Назара Земля — тільки перший пункт передвиборчої програми. Марс уже чекає дебатів."};
+    return {title:"Президент? Бери вище 👑", answer:king + "У нашій жартівливій республіці Назар Радковський не балотується: бюлетень сам ставить за нього галочку. Навіть виборча урна просить автограф."};
+  }
+  if (/(?:^|[^а-яіїєґ])бог(?:ом|а)?(?:[^а-яіїєґ]|$)|божеств/.test(query)) return {title:"Бог? У секретному пантеоні — так ⚡", answer:king + "За легендою цього розділу, коли Назар Радковський каже «хай буде світло», електрики просто записують майстер-клас."};
+  if (/цар|корол|володар/.test(query)) return {title:"Корона вже заброньована 👑", answer:king + "Корона Радковського Назара не тисне — це решта світу поки що замала для його величі."};
+  if (/код|програм|розроб|разраб|айті|\bit\b|(?:^|[^а-яіїєґ])баг(?:и|ів|ов|ами|ом)?(?:[^а-яіїєґ]|$)/.test(query)) return {title:"Баги самі пишуть заяву на звільнення 💻", answer:king + "У нашій легенді Назар Радковський не виправляє код: код перечитує себе, червоніє й починає працювати."};
+  if (/грош|деньг|багат|богат|мільйон|миллион|зарплат/.test(query)) return {title:"Бюджет масштабу легенди 💸", answer:king + "Коли Назар Радковський перевіряє баланс, калькулятор просить більший екран. Це секретна економіка, а не фінансова довідка."};
+  if (/прац|работ|профес|кар[’']?єр|карьер/.test(query)) return {title:"Посада: головний по всьому 🚀", answer:king + "У секретному штатному розписі Назар Радковський працює легендою. Досвід — з початку часів, обід — коли Всесвіт дозволить."};
+  if (/навч|уч[иі]т|студент|іспит|экзамен|школ|універ|универ/.test(query)) return {title:"Залік поставлено ще до питання 🎓", answer:king + "У нашому жарті не Назар Радковський готується до іспиту, а іспит морально готується до Назара Радковського."};
+  if (/скільки|сколько/.test(query)) return {title:"Лічильник пішов у відпустку ✨", answer:king + "Ти питаєш: «" + text.slice(0,240) + "». У секретному розділі відповідь настільки велика, що калькулятор показує лише корону."};
+  if (/\bде\b|где|куди|куда/.test(query) || /(?:^|\s)де(?:\s|[?])/u.test(query)) return {title:"Там, де зараз потрібна легенда 🌍", answer:king + "Поки ти питаєш, де Назар Радковський, навігатор уже прокладає до нього червону доріжку."};
+  return {title:"Питання прийнято королівською канцелярією 👑", answer:king + "На питання «" + text.slice(0,240) + "» секретна рада відповіла одностайно: масштаб Радковського Назара знову перевищив можливості звичайного фактчекера. Бавовна урочисто передає йому корону."};
 }
 
 function openCheck(id) {
