@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#faf7f2">
+  <meta name="description" content="Бавовна — перевіряй текст, посилання та фото за джерелами.">
+  <title>Бавовна · Перевіримо разом</title>
+  <link rel="icon" type="image/webp" href="/static/logo.webp">
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="https://telegram.org/js/telegram-web-app.js?65"></script>
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <svg class="icon-library" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.8" cy="10.8" r="7.5"/><path d="m16.3 16.3 4.4 4.4"/></symbol>
+    <symbol id="i-text" viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6M8 13h8M8 17h6"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="m10 13 4-4M8 16l-1 1a3.5 3.5 0 0 1-5-5l4-4a3.5 3.5 0 0 1 5 0m2 8a3.5 3.5 0 0 0 5 0l4-4a3.5 3.5 0 0 0-5-5l-1 1" transform="translate(0 1)"/></symbol>
+    <symbol id="i-photo" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="9" cy="9" r="2"/><path d="m3 17 5-4 4 3 4-5 5 6"/></symbol>
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v6l4 2"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10v.1"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="m10 6-6 6 6 6M4 12h16"/></symbol>
+    <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 3h7v7m-1-6L10 14m0-10H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2v-5"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 4v16M4 12h16"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 8a8 8 0 0 0-14-3L3 8m0-5v5h5M4 16a8 8 0 0 0 14 3l3-3m0 5v-5h-5"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+  </svg>
+
+  <div class="app-shell">
+    <header class="app-header">
+      <a class="brand" href="#home" aria-label="Бавовна — на головну">
+        <img src="/static/logo.webp" width="42" height="42" alt="" class="brand-logo">
+        <span><strong>Бавовна<span class="brand-dot">.</span></strong><small>Твій помічник із фактчеку</small></span>
+      </a>
+      <button class="icon-button" id="help-button" aria-label="Як це працює"><svg class="icon"><use href="#i-info"/></svg></button>
+    </header>
+
+    <div id="connection" class="connection" role="status" hidden></div>
+    <noscript><p class="notice">Увімкни JavaScript, щоб користуватися застосунком.</p></noscript>
+
+    <main>
+      <section id="home" class="page" aria-label="Нова перевірка">
+        <div class="hero">
+          <div class="hero-copy">
+            <span class="eyebrow"><span class="small-spark">✦</span> Менше шуму. Більше фактів.</span>
+            <h1>Перевіримо<br>разом<span class="purple">?</span></h1>
+            <p>Текст, посилання чи фото —<br>знайдемо джерела.</p>
+          </div>
+          <img class="hero-mascot" src="/static/mascot.webp" width="220" height="220" alt="Бавовна — пухнастий помічник із лупою">
+          <span class="hero-spark" aria-hidden="true">✳</span>
+        </div>
+
+        <form id="check-form" class="input-card">
+          <div class="section-label"><h2>Що перевіряємо?</h2><span>Обери формат</span></div>
+          <div class="input-tabs" role="tablist" aria-label="Формат матеріалу">
+            <button type="button" class="input-tab active" id="tab-text" role="tab" aria-selected="true" aria-controls="material-panel" data-kind="text"><svg class="icon"><use href="#i-text"/></svg>Текст</button>
+            <button type="button" class="input-tab" id="tab-link" role="tab" aria-selected="false" aria-controls="material-panel" tabindex="-1" data-kind="link"><svg class="icon"><use href="#i-link"/></svg>Посилання</button>
+            <button type="button" class="input-tab" id="tab-photo" role="tab" aria-selected="false" aria-controls="material-panel" tabindex="-1" data-kind="photo"><svg class="icon"><use href="#i-photo"/></svg>Фото</button>
+          </div>
+
+          <div id="material-panel" role="tabpanel" aria-labelledby="tab-text">
+            <div id="photo-picker" hidden>
+              <label class="upload-zone" for="photo-input" id="upload-label">
+                <span class="upload-icon"><svg class="icon"><use href="#i-plus"/></svg></span>
+                <strong>Додай фото або скриншот</strong><span>JPEG, PNG, WebP · до 3 МБ</span>
+              </label>
+              <input id="photo-input" class="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp">
+              <div class="photo-preview" id="photo-preview" hidden><img id="preview-image" alt="Обране фото"><button class="secondary-button" type="button" id="replace-photo">Обрати інше фото</button></div>
+            </div>
+            <label for="material" class="visually-hidden" id="material-label">Текст для перевірки</label>
+            <textarea id="material" maxlength="4000" rows="5" placeholder="Встав текст для перевірки…" aria-describedby="input-hint counter" spellcheck="true"></textarea>
+            <div class="input-meta"><span id="input-hint">Додай контекст — це допоможе перевірці.</span><span id="counter">0 / 4 000</span></div>
+          </div>
+
+          <div class="form-error" id="form-error" role="alert" hidden></div>
+          <button class="primary-button" id="submit-button" type="submit"><svg class="icon"><use href="#i-search"/></svg><span>Перевірити</span><span class="button-arrow" aria-hidden="true">↗</span></button>
+          <p class="privacy-line"><svg class="icon"><use href="#i-info"/></svg><span>Пошук — Tavily, аналіз — Groq. Діють безкоштовні квоти провайдерів.</span></p>
+        </form>
+
+        <div class="trust-card"><span class="trust-icon">✦</span><div><strong>Сумніватись — нормально</strong><p>Покажемо джерела й чесно скажемо,<br>якщо доказів недостатньо.</p></div><svg class="icon"><use href="#i-check"/></svg></div>
+      </section>
+
+      <section id="result" class="page" aria-label="Результат перевірки" hidden>
+        <div class="page-title"><button class="icon-button back-home" aria-label="Назад"><svg class="icon"><use href="#i-arrow"/></svg></button><h1 tabindex="-1">Результат перевірки</h1></div>
+        <div id="loading-state" class="loading-card" hidden>
+          <img src="/static/mascot.webp" width="190" height="190" alt="">
+          <div class="loading-dots" aria-hidden="true"><span></span><span></span><span></span></div>
+          <h2>Досліджую матеріал…</h2><p id="waiting-note">Шукаю джерела, читаю сторінки та перевіряю суперечності. Перевірка може тривати кілька хвилин.</p>
+          <span class="loading-footnote">Дочекайся відповіді в цьому застосунку. Не закривай і не перезавантажуй його.</span>
+        </div>
+        <article id="result-content" hidden>
+          <div id="verdict-card" class="verdict-card">
+            <div class="verdict-copy"><span class="eyebrow">Що вдалося з’ясувати</span><span id="score" class="score-symbol">?</span><h2 id="result-label"></h2><p id="score-note"></p></div>
+            <img src="/static/mascot.webp" width="160" height="160" alt="" class="verdict-mascot">
+          </div>
+          <p id="result-date" class="result-date"></p>
+          <section class="explanation-card"><h2>Чому так?</h2><div id="explanation" class="explanation"></div><p class="notice" id="limited-note" hidden>Залишилися обмеження перевірки. Числову оцінку не показуємо.</p></section>
+          <section class="sources-card" id="sources-section"><h2><svg class="icon"><use href="#i-link"/></svg>Джерела<span id="sources-count"></span></h2><div id="sources-list"></div></section>
+          <p class="result-disclaimer">Це допоміжна перевірка, яка може помилятися. Відкривай джерела та звіряй контекст.</p>
+        </article>
+        <div id="result-error" class="empty-card" role="alert" hidden><span class="empty-symbol">!</span><h2>Не вдалося завершити</h2><p id="result-error-text"></p></div>
+        <div id="poll-error" class="notice" role="status" hidden></div>
+        <button id="resume-poll" class="secondary-button" type="button" hidden>Оновити стан перевірки</button>
+        <button id="new-check" class="primary-button" type="button" hidden><svg class="icon"><use href="#i-refresh"/></svg>Нова перевірка</button>
+      </section>
+
+      <section id="history" class="page" aria-label="Історія перевірок" hidden>
+        <div class="page-heading"><span class="eyebrow">Усе під рукою</span><h1 tabindex="-1">Твої перевірки<span class="purple">.</span></h1><p>Результати зберігаються на цьому пристрої.</p></div>
+        <div id="history-message" class="empty-card" role="status"></div>
+        <div id="history-list" class="history-list"></div>
+        <button id="more-history" class="secondary-button full-width" type="button" hidden>Показати ще</button>
+        <button id="refresh-history" class="secondary-button full-width" type="button">Оновити історію</button>
+      </section>
+
+      <section id="about" class="page" aria-label="Про застосунок" hidden>
+        <div class="page-heading"><span class="eyebrow">Познайомимось?</span><h1 tabindex="-1">Факти мають<br>значення<span class="purple">.</span></h1></div>
+        <div class="about-mascot"><img src="/static/mascot.webp" width="180" height="180" alt="Бавовна з лупою"><p>Я Бавовна. Допомагаю розібратися,<br>а висновки залишаю тобі.</p></div>
+        <div class="about-card"><span class="step-number">01</span><div><h2>Додай матеріал</h2><p>Текст новини, посилання на допис або чіткий скриншот. Контекст і дата допоможуть.</p></div></div>
+        <div class="about-card"><span class="step-number peach">02</span><div><h2>Пошукаємо докази</h2><p>Tavily знаходить джерела, а Groq перевіряє до п’яти основних тверджень окремо. До висновків додає джерела, а неперевірене позначає явно.</p></div></div>
+        <div class="about-card"><span class="step-number yellow">03</span><div><h2>Звір джерела</h2><p>Оцінка 0–100 — орієнтовний ризик маніпуляції, а не ймовірність правдивості. Якщо доказів бракує, так і скажемо.</p></div></div>
+        <div class="about-privacy"><h2>Що з твоїми даними?</h2><p>Текст і фото передаються Groq, пошукові запити та посилання — Tavily. Технічне зберігання регулюється правилами цих провайдерів. Пошукові запити можуть містити уривки матеріалу.</p><p>Історія зберігається в localStorage лише на цьому пристрої: коротка назва, дата, результат і джерела. Фото в історію не записується. Інші пристрої цю історію не бачать. Після очищення даних застосунку браузером історія може зникнути.</p><p>Ми не запускаємо повторні перевірки автоматично. Якщо зв’язок обірвався, запит міг бути оброблений та витратити частину безкоштовної квоти; повторне надсилання — окремий виклик. Не надсилай приватні документи.</p></div>
+      </section>
+    </main>
+
+    <nav class="bottom-nav" aria-label="Головна навігація">
+      <button type="button" data-page="home" class="nav-item active" aria-current="page"><svg class="icon"><use href="#i-home"/></svg><span>Головна</span></button>
+      <button type="button" data-page="history" class="nav-item"><svg class="icon"><use href="#i-clock"/></svg><span>Історія</span></button>
+      <button type="button" data-page="about" class="nav-item"><svg class="icon"><use href="#i-info"/></svg><span>Про нас</span></button>
+    </nav>
+    <footer class="app-footer">Бавовна · Знаходь опору у фактах</footer>
+  </div>
+</body>
+</html>

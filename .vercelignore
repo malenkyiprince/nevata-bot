@@ -1,0 +1,11 @@
+.env
+.env.*.local
+.venv
+.git
+__pycache__
+tests
+scripts
+requirements-dev.txt
+README.md
+INSTALL.md
+VERIFICATION.md
