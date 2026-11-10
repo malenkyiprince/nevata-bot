@@ -117,11 +117,15 @@ function renderCheck(item) {
     return;
   }
   const result = item.result;
-  const score = result.score;
-  $("result-label").textContent = score === null ? "Бракує даних" : "Ризик маніпуляції";
-  $("score").textContent = score === null ? "?" : `${score}%`;
-  $("score-note").textContent = score === null ? "Недостатньо доказів для певного висновку." : "Орієнтовна оцінка, не ймовірність правдивості.";
-  $("verdict-card").className = `verdict-card${score !== null && score < 35 ? " low" : score !== null && score >= 65 ? " high" : ""}`;
+  const view = resultView(item);
+  $("result-question").textContent = view.question;
+  $("result-label").textContent = view.verdict;
+  $("result-summary").textContent = view.summary;
+  $("confidence-row").hidden = view.percent === null;
+  $("score").textContent = view.percent === null ? "" : `${view.percent}%`;
+  $("confidence-label").textContent = view.legacy ? "Попередня оцінка ризику маніпуляції" : "Оцінка впевненості у висновку";
+  $("score-note").textContent = view.percent === null ? "Відсоток не визначено: дивись докази й обмеження нижче." : "Орієнтовна оцінка моделі, не виміряна ймовірність істини.";
+  $("verdict-card").className = `verdict-card ${view.tone}`;
   $("result-date").textContent = `Перевірено ${dateLabel(item.created_at)} · Джерела могли змінитися`;
   const explanation = $("explanation");
   explanation.replaceChildren();
@@ -148,6 +152,19 @@ function renderCheck(item) {
     anchor.append(copy, icon("external"));
     $("sources-list").append(anchor);
   });
+}
+
+function resultView(item) {
+  const result = item.result;
+  const first = result.segments?.find((segment) => segment.text)?.text || "";
+  const previousVerdict = first.match(/(?:^|\n)(Підтверджено|Спростовано|Частково підтверджено|Оманливо|Недостатньо даних)[.!\s]/i)?.[1];
+  const verdict = result.verdict || (previousVerdict ? previousVerdict[0].toUpperCase() + previousVerdict.slice(1).toLowerCase() : "Попередня перевірка");
+  const legacy = result.version !== 2;
+  const raw = legacy ? result.score : result.confidence;
+  const percent = Number.isInteger(raw) && raw >= 0 && raw <= 100 ? raw : null;
+  const tone = verdict === "Підтверджено" ? "low" : ["Спростовано", "Оманливо"].includes(verdict) ? "high" : "neutral";
+  return {question: result.question || item.title || "Матеріал перевірки", verdict, percent, tone, legacy,
+    summary: result.summary || "Це результат попередньої версії. Пояснення та джерела збережені нижче."};
 }
 
 function selectPhoto() {

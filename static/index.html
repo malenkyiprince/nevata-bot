@@ -90,12 +90,12 @@
           <span class="loading-footnote">Дочекайся відповіді в цьому застосунку. Не закривай і не перезавантажуй його.</span>
         </div>
         <article id="result-content" hidden>
+          <section class="result-question"><span class="eyebrow">Перевіряємо твердження</span><h2 id="result-question"></h2></section>
           <div id="verdict-card" class="verdict-card">
-            <div class="verdict-copy"><span class="eyebrow">Що вдалося з’ясувати</span><span id="score" class="score-symbol">?</span><h2 id="result-label"></h2><p id="score-note"></p></div>
-            <img src="/static/mascot.webp" width="160" height="160" alt="" class="verdict-mascot">
+            <div class="verdict-copy"><span class="eyebrow">Коротка відповідь</span><h2 id="result-label"></h2><p id="result-summary" class="result-summary"></p><div id="confidence-row" class="confidence-row"><span id="score" class="score-symbol"></span><span id="confidence-label">Оцінка впевненості</span></div><p id="score-note"></p></div>
           </div>
           <p id="result-date" class="result-date"></p>
-          <section class="explanation-card"><h2>Чому так?</h2><div id="explanation" class="explanation"></div><p class="notice" id="limited-note" hidden>Залишилися обмеження перевірки. Числову оцінку не показуємо.</p></section>
+          <section class="explanation-card"><h2>Чому такий висновок?</h2><div id="explanation" class="explanation"></div><p class="notice" id="limited-note" hidden>У поясненні зазначено, що залишилося неперевіреним.</p></section>
           <section class="sources-card" id="sources-section"><h2><svg class="icon"><use href="#i-link"/></svg>Джерела<span id="sources-count"></span></h2><div id="sources-list"></div></section>
           <p class="result-disclaimer">Це допоміжна перевірка, яка може помилятися. Відкривай джерела та звіряй контекст.</p>
         </article>
@@ -118,7 +118,7 @@
         <div class="about-mascot"><img src="/static/mascot.webp" width="180" height="180" alt="Бавовна з лупою"><p>Я Бавовна. Допомагаю розібратися,<br>а висновки залишаю тобі.</p></div>
         <div class="about-card"><span class="step-number">01</span><div><h2>Додай матеріал</h2><p>Текст новини, посилання на допис або чіткий скриншот. Контекст і дата допоможуть.</p></div></div>
         <div class="about-card"><span class="step-number peach">02</span><div><h2>Пошукаємо докази</h2><p>Tavily знаходить джерела, а Groq перевіряє до п’яти основних тверджень окремо. До висновків додає джерела, а неперевірене позначає явно.</p></div></div>
-        <div class="about-card"><span class="step-number yellow">03</span><div><h2>Звір джерела</h2><p>Оцінка 0–100 — орієнтовний ризик маніпуляції, а не ймовірність правдивості. Якщо доказів бракує, так і скажемо.</p></div></div>
+        <div class="about-card"><span class="step-number yellow">03</span><div><h2>Звір джерела</h2><p>Спочатку — вердикт, потім докази. Відсоток — орієнтовна впевненість моделі у висновку, не виміряна ймовірність істини. Одного прямого першоджерела може бути достатньо.</p></div></div>
         <div class="about-privacy"><h2>Що з твоїми даними?</h2><p>Текст і фото передаються Groq, пошукові запити та посилання — Tavily. Технічне зберігання регулюється правилами цих провайдерів. Пошукові запити можуть містити уривки матеріалу.</p><p>Історія зберігається в localStorage лише на цьому пристрої: коротка назва, дата, результат і джерела. Фото в історію не записується. Інші пристрої цю історію не бачать. Після очищення даних застосунку браузером історія може зникнути.</p><p>Ми не запускаємо повторні перевірки автоматично. Якщо зв’язок обірвався, запит міг бути оброблений та витратити частину безкоштовної квоти; повторне надсилання — окремий виклик. Не надсилай приватні документи.</p></div>
       </section>
     </main>

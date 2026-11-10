@@ -11,6 +11,24 @@ import aiohttp
 
 from validation import AnalysisError, safe_url
 
+
+VERDICTS = {"підтверджено", "частково підтверджено", "оманливо", "спростовано", "недостатньо даних"}
+
+
+def object_schema(properties):
+    return {"type": "object", "properties": properties, "required": list(properties), "additionalProperties": False}
+
+
+PLAN_SCHEMA = object_schema({"claim": {"type": "string"}, "queries": {"type": "array", "items": {"type": "string"}}})
+REPORT_SCHEMA = object_schema({
+    "summary": {"type": "string"},
+    "claims": {"type": "array", "items": object_schema({
+        "claim": {"type": "string"}, "verdict": {"type": "string", "enum": sorted(VERDICTS)},
+        "explanation": {"type": "string"}, "source_ids": {"type": "array", "items": {"type": "integer"}},
+        "evidence": {"type": "string", "enum": ["direct", "indirect", "none"]},
+        "confidence": {"type": ["integer", "null"]}})},
+    "limits": {"type": "string"}})
+
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 TAVILY_URL = "https://api.tavily.com/"
 SYSTEM = """Ти обережний фактчекер, відповідай українською, тільки JSON.
@@ -69,7 +87,8 @@ async def complete(session, settings, prompt, material, *, planning=False, photo
             "url": "data:image/jpeg;base64," + base64.b64encode(photo).decode("ascii")}})
     payload = {"model": settings.vision_model if planning else settings.model, "stream": False,
         "temperature": 0, "max_completion_tokens": 800 if planning else settings.max_tokens,
-        "response_format": {"type": "json_object"},
+        "response_format": {"type": "json_schema", "json_schema": {"name": "search_plan" if planning else "factcheck",
+            "strict": True, "schema": PLAN_SCHEMA if planning else REPORT_SCHEMA}},
         "messages": [{"role": "system", "content": SYSTEM + "\n" + prompt}, {"role": "user", "content": content}]}
     if not planning:
         payload["reasoning_effort"] = "low"
@@ -101,7 +120,7 @@ def parse_plan(data):
 
 def collect_sources(results, original=None):
     """Ссылки только из Tavily; до пяти выдержек, с разнообразием доменов."""
-    candidates, seen = [], set()
+    candidates, seen, fingerprints = [], set(), set()
     lists = [result.get("results", []) for result in results]
     if any(not isinstance(items, list) for items in lists):
         raise AnalysisError("Пошук повернув некоректні джерела.")
@@ -116,6 +135,10 @@ def collect_sources(results, original=None):
             content = raw if full else item.get("content")
             if not url or url.rstrip("/") == (original or "").rstrip("/") or url in seen or not isinstance(content, str) or not content.strip():
                 continue
+            fingerprint = re.sub(r"\s+", " ", content.strip()[:1200]).casefold()
+            if fingerprint in fingerprints:
+                continue
+            fingerprints.add(fingerprint)
             seen.add(url)
             candidates.append({"url": url, "title": str(item.get("title") or urlsplit(url).hostname)[:160],
                 "content": content.strip()[:1200], "extracted": full})
@@ -130,51 +153,66 @@ def collect_sources(results, original=None):
     return [{**item, "id": i + 1} for i, item in enumerate(chosen[:5])]
 
 
-VERDICTS = {"підтверджено", "частково підтверджено", "оманливо", "спростовано", "недостатньо даних"}
 
-
-def plain(value, limit):
-    if not isinstance(value, str) or not value.strip() or len(value) > limit:
-        raise AnalysisError("Модель повернула неповний результат.")
-    # Не позволяем превращать выдуманные моделью URL в источники.
-    return re.sub(r"https?://\S+", "[посилання лише в джерелах]", value.strip())
+def plain(value, limit, default=""):
+    if not isinstance(value, str) or not value.strip():
+        if default:
+            return default
+        raise AnalysisError("Модель не сформулювала перевірюване твердження. Додай більше контексту.")
+    return re.sub(r"https?://\S+", "[посилання лише в джерелах]", value.strip()[:limit])
 
 
 def parse_report(data, sources, note=""):
-    if not isinstance(data, dict) or not isinstance(data.get("sufficient"), bool):
+    if not isinstance(data, dict):
         raise AnalysisError("Модель повернула некоректний результат.")
-    score = data.get("score")
-    if score is not None and (type(score) is not int or not 0 <= score <= 100):
-        raise AnalysisError("Некоректна оцінка моделі.")
     claims = data.get("claims")
     if not isinstance(claims, list) or not 1 <= len(claims) <= 5:
-        raise AnalysisError("Немає перевірки основних тверджень.")
-    limits = plain(data.get("limits"), 2000)
-    segments, used, invalid = [], set(), False
+        raise AnalysisError("Модель не виділила твердження. Додай чітке питання або коротший текст.")
     by_id = {source["id"]: source for source in sources}
+    segments, used, checked = [], set(), []
     for index, claim in enumerate(claims, 1):
         if not isinstance(claim, dict) or claim.get("verdict") not in VERDICTS:
             raise AnalysisError("Некоректний вердикт моделі.")
-        ids = claim.get("source_ids")
-        if not isinstance(ids, list) or len(ids) > 5:
+        ids = claim.get("source_ids", [])
+        if not isinstance(ids, list):
             raise AnalysisError("Некоректні посилання моделі.")
-        valid = list(dict.fromkeys(i for i in ids if type(i) is int and i in by_id))
-        invalid |= len(valid) != len(set(str(i) for i in ids)) or (not valid and claim["verdict"] != "недостатньо даних")
-        invalid |= claim["verdict"] == "недостатньо даних"
-        segments.append({"text": f"{index}. {plain(claim.get('claim'), 800)}\n{claim['verdict'].capitalize()}. {plain(claim.get('explanation'), 1800)} "})
+        valid = list(dict.fromkeys(i for i in ids if type(i) is int and i in by_id))[:5]
+        invalid = any(type(i) is not int or i not in by_id for i in ids)
+        direct = claim.get("evidence") == "direct" and any(by_id[i]["extracted"] for i in valid)
+        verdict = claim["verdict"]
+        # Один прямий доказ може спростувати твердження; кількість сайтів не є умовою.
+        if invalid or not valid or not direct:
+            verdict = "недостатньо даних"
+        confidence = claim.get("confidence")
+        if confidence is not None and (type(confidence) is not int or not 0 <= confidence <= 100):
+            raise AnalysisError("Некоректна оцінка впевненості.")
+        if verdict == "недостатньо даних":
+            confidence = None
+        # Не створюємо видимість абсолютної впевненості.
+        if confidence is not None:
+            confidence = min(confidence, 99)
+        question = plain(claim.get("claim"), 800)
+        explanation = plain(claim.get("explanation"), 1800, "Дивись наведені джерела; окремого пояснення модель не надала.")
+        if verdict != claim["verdict"]:
+            explanation = "Наведений висновок не має перевірених прямих посилань і не прийнятий як доведений. " + explanation
+        checked.append({"claim": question, "verdict": verdict.capitalize(), "confidence": confidence})
+        segments.append({"text": f"{index}. {question}\n{verdict.capitalize()}. {explanation} "})
         for source_id in valid:
             used.add(source_id)
             segments.append({"text": f"[{source_id}]", "url": by_id[source_id]["url"]})
         segments.append({"text": "\n\n"})
-    domains = {urlsplit(by_id[i]["url"]).hostname.removeprefix("www.") for i in used if by_id[i]["extracted"]}
-    limited = not data["sufficient"] or invalid or len(domains) < 2 or bool(note)
-    if limited:
-        score = None
-    segments.append({"text": "Межі перевірки: " + limits + "\nПроаналізовано до п’яти тверджень та обмежені уривки джерел. Решту матеріалу не перевірено."
-        + ("\n" + note if note else "")
-        + ("\nДаних недостатньо для числової оцінки. Різні сайти не гарантують незалежності доказів." if limited else "\nОцінка ризику маніпуляції — думка моделі, не ймовірність істинності.")})
-    return {"score": score, "label": "Бракує даних" if score is None else f"Ризик маніпуляції · {score}%",
-        "limited": limited, "segments": segments,
+    main = checked[0]
+    verdict = main["verdict"]
+    unknown = verdict == "Недостатньо даних"
+    summary = plain(data.get("summary"), 500, checked[0]["verdict"] + ". " + plain(claims[0].get("explanation"), 400, "Переглянь джерела нижче."))
+    if unknown:
+        summary = "Не знайдено достатніх прямих доказів, щоб підтвердити або спростувати головне твердження. Це не означає, що воно неправдиве."
+    limits = plain(data.get("limits"), 2000, "Перевірено лише наведені твердження та доступні уривки джерел.")
+    segments.append({"text": "Межі перевірки: " + limits + ("\n" + note.strip() if note.strip() else "")})
+    return {"version": 2, "question": main["claim"], "verdict": verdict, "label": verdict,
+        "summary": summary, "confidence": main["confidence"], "score": None,
+        "limited": unknown or bool(note.strip()) or any(c["verdict"] == "Недостатньо даних" for c in checked),
+        "claims": checked, "segments": segments,
         "sources": [{"id": source["id"], "title": source["title"], "url": source["url"]} for source in sources if source["id"] in used]}
 
 
@@ -211,14 +249,20 @@ async def pipeline(session, settings, kind, text, photo):
         note += " Один із пошукових запитів не виконано; покриття неповне."
     sources = collect_sources(successful, original)
     if not sources:
-        return {"score": None, "label": "Бракує даних", "limited": True, "sources": [],
+        return {"version": 2, "question": claim, "verdict": "Не підтверджено", "summary": "У пошуку немає придатних доказів. Твердження не підтверджене; це не спростування.",
+            "confidence": None, "score": None, "label": "Не підтверджено", "limited": True, "sources": [],
             "segments": [{"text": "Пошук не надав придатних джерел. Це не доводить неправдивість матеріалу.\nМежі перевірки: твердження не підтверджено і не спростовано."}]}
     report = await complete(session, settings,
-        'Перевір до п’яти основних тверджень за наданими уривками, не за пам’яттю моделі. extracted=false означає лише пошуковий уривок. '
-        'До кожного фактичного висновку додай source_ids. sufficient=true лише якщо всі основні твердження мають достатні незалежні докази; інакше score=null. '
-        'score — орієнтовний ризик маніпуляції 0–100, не ймовірність істини. У limits явно вкажи неперевірене та недоступне. '
-        'JSON: {"score":null,"sufficient":false,"claims":[{"claim":"...","verdict":"підтверджено|частково підтверджено|оманливо|спростовано|недостатньо даних",'
-        '"explanation":"...","source_ids":[1]}],"limits":"..."}. verdict — одне з наведених значень.',
+        'Спочатку перевір головне питання користувача: воно має бути першим у claims. Решта — до чотирьох окремих тверджень. '
+        'Дай summary: пряму коротку відповідь у 1–2 реченнях, без передмови. До кожного вердикту додай source_ids. '
+        'evidence=direct лише коли наведений текст джерела прямо підтверджує або прямо суперечить твердженню з урахуванням дати. '
+        'Одного прямого актуального першоджерела може бути достатньо: не вимагай два сайти формально. '
+        'Узгоджені незалежні повідомлення посилюють висновок; копії одного повідомлення — ні. '
+        'Якщо встановлений факт прямо виключає твердження, дай спростовано, навіть якщо про помилковий варіант немає публікацій. '
+        'Сама відсутність результатів пошуку НЕ доводить неправдивість. Непрямі або відсутні докази: evidence=indirect/none, verdict=недостатньо даних. '
+        'Не відмовляйся від чіткого вердикту лише через неперевірені другорядні деталі — переліч їх у limits. '
+        'confidence: ціле 0–99, орієнтовна впевненість у конкретному вердикті, не ймовірність правдивості. Для неперевіреного — null. '
+        'Не додавай відсоток до summary. Пояснення до кожного твердження — 1–3 короткі речення. Поверни JSON за схемою.',
         {"material": text, "claims_to_check": claim, "sources": sources, "limitations": note,
          "date_utc": datetime.now(timezone.utc).date().isoformat()})
     return parse_report(report, sources, note)
