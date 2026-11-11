@@ -153,11 +153,11 @@ def create_app(settings=None, analyzer=analyze):
         command = message.get("text")
         command = command.split("@")[0] if isinstance(command, str) else ""
         text = f"Твій Telegram ID: {identity}" if command == "/id" else (
-            "🔥 Привіт! Це Бавовна. Відкрий застосунок, щоб перевірити текст, посилання або фото.\n\n"
+            "🔥 Привіт! Це НеВата. Відкрий застосунок, щоб перевірити текст, посилання або фото.\n\n"
             "Пошук виконує Tavily, аналіз — Groq. Матеріал передається цим сервісам. Історія зберігається на твоєму пристрої.")
         # Быстрый webhook не запускает платный анализ и не требует очереди.
         return {"method": "sendMessage", "chat_id": chat["id"], "text": text,
-                "reply_markup": {"inline_keyboard": [[{"text": "🔎 Відкрити Бавовну", "web_app": {"url": current.app_url}}]]}}
+                "reply_markup": {"inline_keyboard": [[{"text": "🔎 Відкрити НеВату", "web_app": {"url": current.app_url}}]]}}
 
     app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
     return app

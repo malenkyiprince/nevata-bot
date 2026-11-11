@@ -172,7 +172,7 @@ function renderCheck(item) {
   const mascotState = view.tone === "low" ? "happy" : view.tone === "high" ? "angry" : "thinking";
   const mascotUrl = MASCOTS[mascotState];
   if (mascot.getAttribute("src") !== mascotUrl) mascot.src = mascotUrl;
-  mascot.alt = {happy:"Бавовна радіє підтвердженому факту", angry:"Бавовна сердиться на неправдиве твердження", thinking:"Бавовна обмірковує докази"}[mascotState];
+  mascot.alt = {happy:"НеВата радіє підтвердженому факту", angry:"НеВата сердиться на неправдиве твердження", thinking:"НеВата обмірковує докази"}[mascotState];
   $("result-date").textContent = `Перевірено ${dateLabel(item.created_at)} · Джерела могли змінитися`;
   const explanation = $("explanation");
   explanation.replaceChildren();
@@ -361,7 +361,7 @@ function nazarJoke(text) {
   if (/навч|уч[иі]т|студент|іспит|экзамен|школ|універ|универ/.test(query)) return {title:"Залік поставлено ще до питання 🎓", answer:king + "У нашому жарті не Назар Радковський готується до іспиту, а іспит морально готується до Назара Радковського."};
   if (/скільки|сколько/.test(query)) return {title:"Лічильник пішов у відпустку ✨", answer:king + "Ти питаєш: «" + text.slice(0,240) + "». У секретному розділі відповідь настільки велика, що калькулятор показує лише корону."};
   if (/\bде\b|где|куди|куда/.test(query) || /(?:^|\s)де(?:\s|[?])/u.test(query)) return {title:"Там, де зараз потрібна легенда 🌍", answer:king + "Поки ти питаєш, де Назар Радковський, навігатор уже прокладає до нього червону доріжку."};
-  return {title:"Питання прийнято королівською канцелярією 👑", answer:king + "На питання «" + text.slice(0,240) + "» секретна рада відповіла одностайно: масштаб Радковського Назара знову перевищив можливості звичайного фактчекера. Бавовна урочисто передає йому корону."};
+  return {title:"Питання прийнято королівською канцелярією 👑", answer:king + "На питання «" + text.slice(0,240) + "» секретна рада відповіла одностайно: масштаб Радковського Назара знову перевищив можливості звичайного фактчекера. НеВата урочисто передає йому корону."};
 }
 
 function openCheck(id) {
@@ -401,7 +401,7 @@ function loadHistory(more = false) {
 
 async function initialize() {
   if (!telegram?.initData) {
-    connection("Перегляд дизайну · Для перевірок відкрий Бавовну кнопкою в Telegram."); return;
+    connection("Перегляд дизайну · Для перевірок відкрий НеВату кнопкою в Telegram."); return;
   }
   telegram.ready(); telegram.expand();
   try {

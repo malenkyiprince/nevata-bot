@@ -4,12 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#faf7f2">
-  <meta name="description" content="Бавовна — перевіряй текст, посилання та фото за джерелами.">
-  <title>Бавовна · Перевіримо разом</title>
+  <meta name="description" content="НеВата — перевіряй текст, посилання та фото за джерелами.">
+  <title>NeVata · НеВата</title>
+  <meta name="application-name" content="NeVata">
   <link rel="icon" type="image/webp" href="/static/logo-ui.webp?v=dc9135922ba4">
   <link rel="stylesheet" href="/static/style.css?v=9c5042fb165b">
   <script src="https://telegram.org/js/telegram-web-app.js?65"></script>
-  <script src="/static/app.js?v=0eb696c5d0f0" defer></script>
+  <script src="/static/app.js?v=174ee9909e66" defer></script>
 </head>
 <body>
   <svg class="icon-library" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
@@ -29,9 +30,9 @@
 
   <div class="app-shell">
     <header class="app-header">
-      <a class="brand" href="#home" aria-label="Бавовна — на головну">
+      <a class="brand" href="#home" aria-label="НеВата — на головну">
         <img src="/static/logo-ui.webp?v=dc9135922ba4" width="42" height="42" alt="" class="brand-logo">
-        <span><strong>Бавовна<span class="brand-dot">.</span></strong><small>Твій помічник із фактчеку</small></span>
+        <span><strong>НеВата<span class="brand-dot">.</span></strong><small>Твій помічник із фактчеку</small></span>
       </a>
       <button class="icon-button" id="help-button" aria-label="Як це працює"><svg class="icon"><use href="#i-info"/></svg></button>
     </header>
@@ -47,7 +48,7 @@
             <h1>Перевіримо<br>разом<span class="purple">?</span></h1>
             <p>Текст, посилання чи фото —<br>знайдемо джерела.</p>
           </div>
-          <img class="hero-mascot" src="/static/mascot-main-ui.webp?v=b97fd2f423eb" width="220" height="220" alt="Бавовна — пухнастий помічник із лупою">
+          <img class="hero-mascot" src="/static/mascot-main-ui.webp?v=b97fd2f423eb" width="220" height="220" alt="НеВата — пухнастий помічник із лупою">
           <span class="hero-spark" aria-hidden="true">✳</span>
         </div>
 
@@ -84,7 +85,7 @@
       <section id="result" class="page" aria-label="Результат перевірки" hidden>
         <div class="page-title"><button class="icon-button back-home" aria-label="Назад"><svg class="icon"><use href="#i-arrow"/></svg></button><h1 tabindex="-1">Результат перевірки</h1></div>
         <div id="loading-state" class="loading-card" hidden>
-          <img src="/static/mascot-thinking-ui.webp?v=1c972a3e93a4" width="190" height="190" loading="lazy" decoding="async" alt="Бавовна досліджує джерела">
+          <img src="/static/mascot-thinking-ui.webp?v=1c972a3e93a4" width="190" height="190" loading="lazy" decoding="async" alt="НеВата досліджує джерела">
           <div class="loading-dots" aria-hidden="true"><span></span><span></span><span></span></div>
           <h2>Досліджую матеріал…</h2><p id="waiting-note">Шукаю джерела, читаю сторінки та перевіряю суперечності. Перевірка може тривати кілька хвилин.</p>
           <span class="loading-footnote">Дочекайся відповіді в цьому застосунку. Не закривай і не перезавантажуй його.</span>
@@ -92,7 +93,7 @@
         <article id="secret-result" class="secret-result" hidden aria-label="Секретний жартівливий розділ">
           <span class="eyebrow">✦ Секретний розділ відкрито</span>
           <h2 id="secret-question"></h2>
-          <img src="/static/mascot-royal-ui.webp?v=59c5c4f7aaea" width="150" height="150" loading="lazy" decoding="async" alt="Бавовна в короні">
+          <img src="/static/mascot-royal-ui.webp?v=59c5c4f7aaea" width="150" height="150" loading="lazy" decoding="async" alt="НеВата в короні">
           <strong class="secret-percent">1488%</strong>
           <h3 id="secret-title">Так, він цар і бог 👑</h3>
           <p id="secret-answer"></p>
@@ -102,7 +103,7 @@
         <article id="result-content" hidden>
           <section class="result-question"><span id="question-caption" class="eyebrow">Твоє запитання</span><h2 id="result-question"></h2><p id="checked-claim" class="checked-claim" hidden></p></section>
           <div id="verdict-card" class="verdict-card">
-            <img id="result-mascot" class="result-mascot" src="/static/mascot-thinking-ui.webp?v=1c972a3e93a4" width="116" height="116" loading="lazy" decoding="async" alt="Бавовна обмірковує докази">
+            <img id="result-mascot" class="result-mascot" src="/static/mascot-thinking-ui.webp?v=1c972a3e93a4" width="116" height="116" loading="lazy" decoding="async" alt="НеВата обмірковує докази">
             <div class="verdict-copy"><span class="eyebrow">Коротка відповідь</span><h2 id="result-label"></h2><p id="result-summary" class="result-summary"></p><div id="confidence-row" class="confidence-row"><span id="score" class="score-symbol"></span><span id="confidence-label">Оцінка впевненості</span></div><p id="score-note"></p></div>
           </div>
           <p id="result-date" class="result-date"></p>
@@ -128,7 +129,7 @@
 
       <section id="about" class="page" aria-label="Про застосунок" hidden>
         <div class="page-heading"><span class="eyebrow">Познайомимось?</span><h1 tabindex="-1">Факти мають<br>значення<span class="purple">.</span></h1></div>
-        <div class="about-mascot"><img src="/static/mascot-happy-ui.webp?v=4661441a92a3" width="180" height="180" loading="lazy" decoding="async" alt="Радісна Бавовна вітає"><p>Я Бавовна. Допомагаю розібратися,<br>а висновки залишаю тобі.</p></div>
+        <div class="about-mascot"><img src="/static/mascot-happy-ui.webp?v=4661441a92a3" width="180" height="180" loading="lazy" decoding="async" alt="Радісна НеВата вітає"><p>Я НеВата. Допомагаю розібратися,<br>а висновки залишаю тобі.</p></div>
         <div class="about-card"><span class="step-number">01</span><div><h2>Додай матеріал</h2><p>Текст новини, посилання на допис або чіткий скриншот. Контекст і дата допоможуть.</p></div></div>
         <div class="about-card"><span class="step-number peach">02</span><div><h2>Пошукаємо докази</h2><p>Tavily знаходить джерела, а Groq перевіряє до п’яти основних тверджень окремо. До висновків додає джерела, а неперевірене позначає явно.</p></div></div>
         <div class="about-card"><span class="step-number yellow">03</span><div><h2>Звір джерела</h2><p>Спочатку — вердикт, потім докази. Відсоток — орієнтовна впевненість моделі у висновку, не виміряна ймовірність істини. Одного прямого першоджерела може бути достатньо.</p></div></div>
@@ -141,7 +142,7 @@
       <button type="button" data-page="history" class="nav-item"><svg class="icon"><use href="#i-clock"/></svg><span>Історія</span></button>
       <button type="button" data-page="about" class="nav-item"><svg class="icon"><use href="#i-info"/></svg><span>Про нас</span></button>
     </nav>
-    <footer class="app-footer">Бавовна · Знаходь опору у фактах</footer>
+    <footer class="app-footer">НеВата · Знаходь опору у фактах</footer>
   </div>
 </body>
 </html>

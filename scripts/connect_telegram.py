@@ -49,7 +49,7 @@ def main():
     telegram('getMe')
     telegram('setWebhook', url=base + '/api/telegram', secret_token=secret,
              allowed_updates=['message'], drop_pending_updates=False)
-    telegram('setChatMenuButton', menu_button={'type': 'web_app', 'text': 'Відкрити Бавовну', 'web_app': {'url': base}})
+    telegram('setChatMenuButton', menu_button={'type': 'web_app', 'text': 'Відкрити НеВату', 'web_app': {'url': base}})
     if telegram('getWebhookInfo').get('url') != base + '/api/telegram':
         raise ValueError('Адрес webhook не совпал с APP_URL.')
     print('Telegram подключён к', base)
