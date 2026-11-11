@@ -1,0 +1,43 @@
+{
+  "before": 5602036,
+  "after": 165322,
+  "reduction_percent": 97.0,
+  "files": [
+    [
+      "logo.webp",
+      192300,
+      "logo-ui.webp",
+      2444
+    ],
+    [
+      "mascot.webp",
+      654524,
+      "mascot-main-ui.webp",
+      32710
+    ],
+    [
+      "mascot-happy.png",
+      1201060,
+      "mascot-happy-ui.webp",
+      30626
+    ],
+    [
+      "mascot-angry.png",
+      1250661,
+      "mascot-angry-ui.webp",
+      32016
+    ],
+    [
+      "mascot-thinking.png",
+      1115422,
+      "mascot-thinking-ui.webp",
+      31096
+    ],
+    [
+      "mascot-royal.png",
+      1188069,
+      "mascot-royal-ui.webp",
+      36430
+    ]
+  ]
+}
