@@ -1,6 +1,7 @@
 """Все настройки в одном месте. Платные резервные провайдеры не используются."""
 import os
 import re
+from functools import lru_cache
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 
@@ -48,3 +49,9 @@ class Settings:
 
     def permits(self, user_id):
         return not self.allowed_users or str(user_id) in {value.strip() for value in self.allowed_users.split(",")}
+
+
+@lru_cache(maxsize=1)
+def get_settings():
+    """Переменные Vercel меняются через redeploy, читать .env на каждом запросе не нужно."""
+    return Settings.from_env()

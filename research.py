@@ -10,6 +10,7 @@ from urllib.parse import urlsplit
 import aiohttp
 
 from validation import AnalysisError, safe_url
+from easter_egg import is_nazar, secret_result
 
 
 VERDICTS = {"підтверджено", "частково підтверджено", "оманливо", "спростовано", "недостатньо даних"}
@@ -19,7 +20,8 @@ def object_schema(properties):
     return {"type": "object", "properties": properties, "required": list(properties), "additionalProperties": False}
 
 
-PLAN_SCHEMA = object_schema({"claim": {"type": "string"}, "queries": {"type": "array", "items": {"type": "string"}}})
+PLAN_SCHEMA = object_schema({"claim": {"type": "string"}, "queries": {"type": "array", "items": {"type": "string"}},
+    "visible_text": {"type": "string"}})
 REPORT_SCHEMA = object_schema({
     "summary": {"type": "string"},
     "claims": {"type": "array", "items": object_schema({
@@ -81,12 +83,12 @@ async def post_json(session, url, key, payload, provider):
 
 
 async def complete(session, settings, prompt, material, *, planning=False, photo=None):
-    content = [{"type": "text", "text": json.dumps(material, ensure_ascii=False)}]
+    content = [{"type": "text", "text": json.dumps(material, ensure_ascii=False, separators=(",", ":"))}]
     if photo:
         content.append({"type": "image_url", "image_url": {
             "url": "data:image/jpeg;base64," + base64.b64encode(photo).decode("ascii")}})
     payload = {"model": settings.vision_model if planning else settings.model, "stream": False,
-        "temperature": 0, "max_completion_tokens": 800 if planning else settings.max_tokens,
+        "temperature": 0, "max_completion_tokens": 1200 if planning and photo else 800 if planning else settings.max_tokens,
         "response_format": {"type": "json_schema", "json_schema": {"name": "search_plan" if planning else "factcheck",
             "strict": True, "schema": PLAN_SCHEMA if planning else REPORT_SCHEMA}},
         "messages": [{"role": "system", "content": SYSTEM + "\n" + prompt}, {"role": "user", "content": content}]}
@@ -231,12 +233,18 @@ async def pipeline(session, settings, kind, text, photo):
         if not isinstance(raw, str) or len(raw.strip()) < 30:
             raise AnalysisError("Сторінка недоступна для читання. Встав текст або скриншот.")
         text = raw.strip()[:4000]
+        # Для пасхалки ищем имя во всём уже прочитанном тексте страницы, не только в выдержке.
+        if is_nazar(raw):
+            return secret_result(raw)
         if len(raw.strip()) > 4000:
             note = "Вихідна сторінка довша за ліміт: перевірено лише перші 4000 символів, решту не перевірено."
     plan = await complete(session, settings,
         'Виділи до п’яти ключових перевірюваних тверджень у claim. Для фото спочатку прочитай видимий текст; якщо не читається, claim="", queries=[]. '
-        'Склади один або два короткі пошукові запити для доказів і контрдоказів. JSON: {"claim":"твердження з датами й іменами", "queries":["запит"]}.',
+        'У visible_text дослівно перепиши видимий текст з фото (до 1600 символів), зберігай імена, не домислюй нерозбірливе. Без фото visible_text="". '
+        'Склади один або два короткі пошукові запити для доказів і контрдоказів. Поверни JSON за схемою.',
         {"material": text, "date_utc": datetime.now(timezone.utc).date().isoformat()}, planning=True, photo=photo)
+    if photo and is_nazar(plan.get("visible_text")):
+        return secret_result((text + "\n" + plan["visible_text"]).strip())
     claim, queries = parse_plan(plan)
     results = await asyncio.gather(*(post_json(session, TAVILY_URL + "search", settings.search_key,
         {"query": query, "search_depth": "basic", "auto_parameters": False, "max_results": 5,
@@ -263,12 +271,16 @@ async def pipeline(session, settings, kind, text, photo):
         'Не відмовляйся від чіткого вердикту лише через неперевірені другорядні деталі — переліч їх у limits. '
         'confidence: ціле 0–99, орієнтовна впевненість у конкретному вердикті, не ймовірність правдивості. Для неперевіреного — null. '
         'Не додавай відсоток до summary. Пояснення до кожного твердження — 1–3 короткі речення. Поверни JSON за схемою.',
-        {"material": text, "claims_to_check": claim, "sources": sources, "limitations": note,
+        {"material": text, "claims_to_check": claim,
+         "sources": [{"id": source["id"], "title": source["title"], "domain": urlsplit(source["url"]).hostname,
+                      "content": source["content"], "extracted": source["extracted"]} for source in sources], "limitations": note,
          "date_utc": datetime.now(timezone.utc).date().isoformat()})
     return parse_report(report, sources, note)
 
 
 async def analyze(settings, kind, text, photo=None):
+    if is_nazar(text):
+        return secret_result(text)
     try:
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=65, connect=10)) as session:
             return await asyncio.wait_for(pipeline(session, settings, kind, text, photo), timeout=settings.timeout)

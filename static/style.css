@@ -144,4 +144,5 @@ textarea.link-input { min-height:105px; }
 .secret-result p { font-size:15px; line-height:1.7; }
 .secret-result small { display:block; color:var(--muted); font-size:11px; line-height:1.5; margin-top:20px; }
 .secret-result .secret-dedication { font-size:17px; font-weight:700; margin:20px 0 0; }
+.result-mascot { display:block; width:116px; height:116px; object-fit:contain; margin:0 auto 12px; }
 @media(prefers-reduced-motion:reduce) { *,*::before,*::after { animation:none !important; transition:none !important; scroll-behavior:auto !important; } }

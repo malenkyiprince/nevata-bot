@@ -1,6 +1,7 @@
 /* Telegram Mini App: Groq + Tavily, история только на устройстве. */
 "use strict";
 const $ = (id) => document.getElementById(id);
+const MASCOTS = {"happy": "/static/mascot-happy-ui.webp?v=4661441a92a3", "angry": "/static/mascot-angry-ui.webp?v=5841d1680f2d", "thinking": "/static/mascot-thinking-ui.webp?v=1c972a3e93a4", "royal": "/static/mascot-royal-ui.webp?v=59c5c4f7aaea"};
 const telegram = window.Telegram?.WebApp;
 const state = {page:"home", kind:"text", authenticated:false, userId:null, timeout:180,
   photo:null, photoUrl:null, submitting:false, requestId:null, current:null, history:[], shown:20,
@@ -114,8 +115,9 @@ function renderCheck(item) {
   $("poll-error").hidden = true;
   $("resume-poll").hidden = true;
   if (secret) {
-    $("secret-question").textContent = item.title;
-    const joke = item.result.joke || nazarJoke(item.title);
+    const question = item.result.easterEggText || item.title;
+    $("secret-question").textContent = question.slice(0,800);
+    const joke = item.result.joke || nazarJoke(question);
     $("secret-title").textContent = joke.title;
     $("secret-answer").textContent = joke.answer;
     return;
@@ -135,6 +137,11 @@ function renderCheck(item) {
   $("confidence-label").textContent = view.legacy ? "Попередня оцінка ризику маніпуляції" : "Оцінка впевненості у висновку";
   $("score-note").textContent = view.percent === null ? "Відсоток не визначено: дивись докази й обмеження нижче." : "Орієнтовна оцінка моделі, не виміряна ймовірність істини.";
   $("verdict-card").className = `verdict-card ${view.tone}`;
+  const mascot = $("result-mascot");
+  const mascotState = view.tone === "low" ? "happy" : view.tone === "high" ? "angry" : "thinking";
+  const mascotUrl = MASCOTS[mascotState];
+  if (mascot.getAttribute("src") !== mascotUrl) mascot.src = mascotUrl;
+  mascot.alt = {happy:"Бавовна радіє підтвердженому факту", angry:"Бавовна сердиться на неправдиве твердження", thinking:"Бавовна обмірковує докази"}[mascotState];
   $("result-date").textContent = `Перевірено ${dateLabel(item.created_at)} · Джерела могли змінитися`;
   const explanation = $("explanation");
   explanation.replaceChildren();
@@ -271,7 +278,7 @@ async function submit(event) {
   if (state.kind === "photo" && !state.photo) return formError("Спочатку обери фото.");
   const item = {id:requestId(), kind:state.kind, title:text.replace(/\s+/g," ").slice(0,100) || "Перевірка фото",
     created_at:Math.floor(Date.now()/1000), status:"running", result:null, error:null};
-  if (state.kind === "text" && isNazarEasterEgg(text)) {
+  if (isNazarEasterEgg(text)) {
     item.status = "done";
     item.result = {easterEgg:"nazar", joke:nazarJoke(text), label:"Секретний розділ ✦", score:null, limited:false, segments:[], sources:[]};
     state.current = item;
@@ -346,6 +353,7 @@ function loadHistory(more = false) {
   const rows = state.current?.status === "running" ? [state.current,...state.history] : state.history;
   $("history-message").hidden = rows.length > 0;
   $("history-message").textContent = "На цьому пристрої ще немає перевірок. Додай матеріал на головній.";
+  const fragment = document.createDocumentFragment();
   for (const item of rows.slice(0, state.shown)) {
     const button = element("button", "history-item"); button.type = "button";
     const kind = element("span", "history-kind"); kind.append(icon(item.kind === "link" ? "link" : item.kind === "photo" ? "photo" : "text"));
@@ -354,8 +362,9 @@ function loadHistory(more = false) {
     copy.append(element("span",`history-status ${item.status}`,item.status === "running" ? "Перевіряю…" : item.status === "failed" ? "Не завершено" : item.result.label));
     button.append(kind,copy,icon("external"));
     button.addEventListener("click",() => openCheck(item.id));
-    $("history-list").append(button);
+    fragment.append(button);
   }
+  $("history-list").append(fragment);
   $("more-history").hidden = rows.length <= state.shown;
 }
 

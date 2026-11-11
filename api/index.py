@@ -3,7 +3,6 @@ import asyncio
 import hmac
 import json
 import logging
-import re
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -11,7 +10,8 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from auth import telegram_user
-from config import Settings
+from config import get_settings
+from inflight import Inflight, BusyError, request_key
 from research import analyze
 from validation import AnalysisError, MAX_PHOTO, MAX_TEXT, prepare_photo, safe_url
 
@@ -21,9 +21,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def create_app(settings=None, analyzer=analyze):
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+    inflight = Inflight()
 
     def config():
-        return settings or Settings.from_env()
+        return settings or get_settings()
 
     def user(request):
         current = config()
@@ -50,7 +51,13 @@ def create_app(settings=None, analyzer=analyze):
         except Exception as error:
             logging.error("Request failed: %s", type(error).__name__)
             response = JSONResponse({"error": "Сервіс тимчасово недоступний."}, status_code=503)
-        response.headers["Cache-Control"] = "no-store" if request.url.path.startswith("/api/") else "no-cache"
+        if request.url.path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-store"
+        elif request.url.path.startswith("/static/") and response.status_code in (200, 304):
+            # С query-версией ресурсы безопасно переиспользуются после новых deployment.
+            response.headers["Cache-Control"] = "public, max-age=86400"
+        else:
+            response.headers["Cache-Control"] = "no-cache"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' https://telegram.org; style-src 'self'; img-src 'self' blob: data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'"
@@ -76,7 +83,7 @@ def create_app(settings=None, analyzer=analyze):
 
     @app.post("/api/analyze")
     async def check(request: Request):
-        _, current = user(request)
+        identity, current = user(request)
         if request.headers.get("content-type", "").split(";")[0] != "multipart/form-data":
             raise HTTPException(400, "Використай форму застосунку.")
         body = bytearray()
@@ -85,6 +92,7 @@ def create_app(settings=None, analyzer=analyze):
             if len(body) > MAX_PHOTO + 65536:
                 raise HTTPException(413, "Фото має бути до 3 МБ.")
         request._body = bytes(body)
+        del body
         try:
             async with request.form(max_files=1, max_fields=2, max_part_size=MAX_TEXT * 4) as form:
                 if set(form) - {"kind", "text", "photo"} or len(form.multi_items()) != len(form):
@@ -109,7 +117,10 @@ def create_app(settings=None, analyzer=analyze):
         except (ValueError, TypeError, AttributeError):
             raise HTTPException(400, "Додай коректний текст, посилання або фото JPEG/PNG/WebP до 3 МБ.") from None
         try:
-            return await analyzer(current, kind, text, photo)
+            key = request_key(identity["id"], kind, text, photo)
+            return await inflight.run(key, lambda: analyzer(current, kind, text, photo))
+        except BusyError:
+            raise HTTPException(503, "Зараз багато перевірок. Спробуй трохи пізніше; новий API-запит не запускався.") from None
         except AnalysisError as error:
             raise HTTPException(502, str(error)) from None
 
@@ -128,12 +139,18 @@ def create_app(settings=None, analyzer=analyze):
                 raise ValueError
         except ValueError:
             raise HTTPException(400, "Invalid update") from None
-        message = data.get("message", {})
-        chat = message.get("chat", {})
-        if chat.get("type") != "private" or message.get("from", {}).get("is_bot"):
+        message = data.get("message")
+        if not isinstance(message, dict):
             return {"ok": True}
-        identity = message.get("from", {}).get("id", chat["id"])
-        command = (message.get("text") or "").split("@")[0]
+        chat, sender = message.get("chat"), message.get("from")
+        if not isinstance(chat, dict) or type(chat.get("id")) is not int or chat.get("type") != "private":
+            return {"ok": True}
+        sender = sender if isinstance(sender, dict) else {}
+        if sender.get("is_bot"):
+            return {"ok": True}
+        identity = sender.get("id", chat["id"])
+        command = message.get("text")
+        command = command.split("@")[0] if isinstance(command, str) else ""
         text = f"Твій Telegram ID: {identity}" if command == "/id" else (
             "🔥 Привіт! Це Бавовна. Відкрий застосунок, щоб перевірити текст, посилання або фото.\n\n"
             "Пошук виконує Tavily, аналіз — Groq. Матеріал передається цим сервісам. Історія зберігається на твоєму пристрої.")
