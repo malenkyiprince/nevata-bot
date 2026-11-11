@@ -7,9 +7,9 @@
   <meta name="description" content="Бавовна — перевіряй текст, посилання та фото за джерелами.">
   <title>Бавовна · Перевіримо разом</title>
   <link rel="icon" type="image/webp" href="/static/logo-ui.webp?v=dc9135922ba4">
-  <link rel="stylesheet" href="/static/style.css?v=878b765551d7">
+  <link rel="stylesheet" href="/static/style.css?v=9c5042fb165b">
   <script src="https://telegram.org/js/telegram-web-app.js?65"></script>
-  <script src="/static/app.js?v=157b5e127498" defer></script>
+  <script src="/static/app.js?v=0eb696c5d0f0" defer></script>
 </head>
 <body>
   <svg class="icon-library" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
@@ -100,12 +100,14 @@
           <p class="secret-dedication">Іван це спеціально для вас)</p>
         </article>
         <article id="result-content" hidden>
-          <section class="result-question"><span class="eyebrow">Перевіряємо твердження</span><h2 id="result-question"></h2></section>
+          <section class="result-question"><span id="question-caption" class="eyebrow">Твоє запитання</span><h2 id="result-question"></h2><p id="checked-claim" class="checked-claim" hidden></p></section>
           <div id="verdict-card" class="verdict-card">
             <img id="result-mascot" class="result-mascot" src="/static/mascot-thinking-ui.webp?v=1c972a3e93a4" width="116" height="116" loading="lazy" decoding="async" alt="Бавовна обмірковує докази">
             <div class="verdict-copy"><span class="eyebrow">Коротка відповідь</span><h2 id="result-label"></h2><p id="result-summary" class="result-summary"></p><div id="confidence-row" class="confidence-row"><span id="score" class="score-symbol"></span><span id="confidence-label">Оцінка впевненості</span></div><p id="score-note"></p></div>
           </div>
           <p id="result-date" class="result-date"></p>
+          <section id="clarification-card" class="clarification-card" hidden><h2>Важливе уточнення</h2><p id="clarification-text"></p><div id="clarification-links"></div></section>
+          <section id="considerations-card" class="explanation-card considerations-card" hidden><h2>Що ще варто врахувати</h2><div id="considerations-list"></div></section>
           <section class="explanation-card"><h2>Чому такий висновок?</h2><div id="explanation" class="explanation"></div><p class="notice" id="limited-note" hidden>У поясненні зазначено, що залишилося неперевіреним.</p></section>
           <section class="sources-card" id="sources-section"><h2><svg class="icon"><use href="#i-link"/></svg>Джерела<span id="sources-count"></span></h2><div id="sources-list"></div></section>
           <p class="result-disclaimer">Це допоміжна перевірка, яка може помилятися. Відкривай джерела та звіряй контекст.</p>
@@ -130,7 +132,7 @@
         <div class="about-card"><span class="step-number">01</span><div><h2>Додай матеріал</h2><p>Текст новини, посилання на допис або чіткий скриншот. Контекст і дата допоможуть.</p></div></div>
         <div class="about-card"><span class="step-number peach">02</span><div><h2>Пошукаємо докази</h2><p>Tavily знаходить джерела, а Groq перевіряє до п’яти основних тверджень окремо. До висновків додає джерела, а неперевірене позначає явно.</p></div></div>
         <div class="about-card"><span class="step-number yellow">03</span><div><h2>Звір джерела</h2><p>Спочатку — вердикт, потім докази. Відсоток — орієнтовна впевненість моделі у висновку, не виміряна ймовірність істини. Одного прямого першоджерела може бути достатньо.</p></div></div>
-        <div class="about-privacy"><h2>Що з твоїми даними?</h2><p>Текст і фото передаються Groq, пошукові запити та посилання — Tavily. Технічне зберігання регулюється правилами цих провайдерів. Пошукові запити можуть містити уривки матеріалу.</p><p>Історія зберігається в localStorage лише на цьому пристрої: коротка назва, дата, результат і джерела. Фото в історію не записується. Інші пристрої цю історію не бачать. Після очищення даних застосунку браузером історія може зникнути.</p><p>Ми не запускаємо повторні перевірки автоматично. Якщо зв’язок обірвався, запит міг бути оброблений та витратити частину безкоштовної квоти; повторне надсилання — окремий виклик. Не надсилай приватні документи.</p></div>
+        <div class="about-privacy"><h2>Що з твоїми даними?</h2><p>Текст і фото передаються Groq, пошукові запити та посилання — Tavily. Технічне зберігання регулюється правилами цих провайдерів. Пошукові запити можуть містити уривки матеріалу.</p><p>Історія зберігається в localStorage лише на цьому пристрої: оригінальний запит, коротка назва, дата, результат і джерела. Фото в історію не записується. Інші пристрої цю історію не бачать. Після очищення даних застосунку браузером історія може зникнути.</p><p>Ми не запускаємо повторні перевірки автоматично. Якщо зв’язок обірвався, запит міг бути оброблений та витратити частину безкоштовної квоти; повторне надсилання — окремий виклик. Не надсилай приватні документи.</p></div>
       </section>
     </main>
 

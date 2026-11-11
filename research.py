@@ -24,6 +24,9 @@ PLAN_SCHEMA = object_schema({"claim": {"type": "string"}, "queries": {"type": "a
     "visible_text": {"type": "string"}})
 REPORT_SCHEMA = object_schema({
     "summary": {"type": "string"},
+    "clarification": object_schema({"text": {"type": "string"}, "source_ids": {"type": "array", "items": {"type": "integer"}}}),
+    "considerations": {"type": "array", "items": object_schema({"angle": {"type": "string"}, "text": {"type": "string"},
+        "source_ids": {"type": "array", "items": {"type": "integer"}}})},
     "claims": {"type": "array", "items": object_schema({
         "claim": {"type": "string"}, "verdict": {"type": "string", "enum": sorted(VERDICTS)},
         "explanation": {"type": "string"}, "source_ids": {"type": "array", "items": {"type": "integer"}},
@@ -40,6 +43,9 @@ SYSTEM = """Ти обережний фактчекер, відповідай у�
 Перевіряй дату, контекст, найсильніше правдоподібне тлумачення та контрдокази.
 Перепублікації одного повідомлення не є незалежними доказами.
 Не встановлюй справжність фотографії лише за виглядом. Не додавай URL у текст.
+Для кожного питання перевір його передумову, значення термінів, часові та географічні межі,
+умови й винятки, докази за і проти. Відокремлюй факт, припущення, думку та невідоме.
+Не створюй хибного балансу: кількість поглядів не замінює якість доказів.
 Дотримуйся схеми JSON, заданої користувачем."""
 
 
@@ -210,9 +216,39 @@ def parse_report(data, sources, note=""):
     if unknown:
         summary = "Не знайдено достатніх прямих доказів, щоб підтвердити або спростувати головне твердження. Це не означає, що воно неправдиве."
     limits = plain(data.get("limits"), 2000, "Перевірено лише наведені твердження та доступні уривки джерел.")
+    clarification, clarification_sources = "", []
+    extra = data.get("clarification")
+    if isinstance(extra, dict) and isinstance(extra.get("text"), str) and extra["text"].strip():
+        ids = extra.get("source_ids")
+        if isinstance(ids, list) and ids and all(type(i) is int and i in by_id for i in ids):
+            valid = list(dict.fromkeys(ids))[:5]
+            if any(by_id[i]["extracted"] for i in valid):
+                clarification = plain(extra["text"], 1200)
+                clarification_sources = [{"id": i, "url": by_id[i]["url"]} for i in valid]
+                used.update(valid)
+        if not clarification:
+            limits += " Додаткове уточнення без прямих посилань не показано як встановлений факт."
+    considerations = []
+    raw_angles = data.get("considerations", [])
+    if isinstance(raw_angles, list):
+        for angle in raw_angles[:3]:
+            if not isinstance(angle, dict):
+                continue
+            ids = angle.get("source_ids")
+            if not isinstance(ids, list) or not ids or not all(type(i) is int and i in by_id for i in ids):
+                limits += " Один додатковий аспект без коректних посилань не включено."
+                continue
+            if not isinstance(angle.get("angle"), str) or not angle["angle"].strip() or not isinstance(angle.get("text"), str) or not angle["text"].strip():
+                continue
+            valid = list(dict.fromkeys(ids))[:5]
+            considerations.append({"angle": plain(angle["angle"], 150), "text": plain(angle["text"], 900),
+                "sources": [{"id": i, "url": by_id[i]["url"]} for i in valid]})
+            used.update(valid)
     segments.append({"text": "Межі перевірки: " + limits + ("\n" + note.strip() if note.strip() else "")})
     return {"version": 2, "question": main["claim"], "verdict": verdict, "label": verdict,
-        "summary": summary, "confidence": main["confidence"], "score": None,
+        "summary": summary, "clarification": clarification, "clarification_sources": clarification_sources,
+        "considerations": considerations,
+        "confidence": main["confidence"], "score": None,
         "limited": unknown or bool(note.strip()) or any(c["verdict"] == "Недостатньо даних" for c in checked),
         "claims": checked, "segments": segments,
         "sources": [{"id": source["id"], "title": source["title"], "url": source["url"]} for source in sources if source["id"] in used]}
@@ -239,7 +275,11 @@ async def pipeline(session, settings, kind, text, photo):
         if len(raw.strip()) > 4000:
             note = "Вихідна сторінка довша за ліміт: перевірено лише перші 4000 символів, решту не перевірено."
     plan = await complete(session, settings,
-        'Виділи до п’яти ключових перевірюваних тверджень у claim. Для фото спочатку прочитай видимий текст; якщо не читається, claim="", queries=[]. '
+        'Виділи до п’яти ключових перевірюваних тверджень у claim. Збережи часовий зміст запитання: «чи був» — про минуле, «чи є зараз» — про теперішнє. '
+        'Не підміняй історичне запитання перевіркою поточної посади. Якщо час неоднозначний або змішаний, шукай і поточний статус, і попередній період. '
+        'Для будь-якої теми визнач передумову, неоднозначні терміни та найважливіші різні аспекти. '
+        'Використай до двох пошукових запитів для найсуттєвіших аспектів і можливих контрдоказів, не лише для підтвердження формулювання. '
+        'Для фото спочатку прочитай видимий текст; якщо не читається, claim="", queries=[]. '
         'У visible_text дослівно перепиши видимий текст з фото (до 1600 символів), зберігай імена, не домислюй нерозбірливе. Без фото visible_text="". '
         'Склади один або два короткі пошукові запити для доказів і контрдоказів. Поверни JSON за схемою.',
         {"material": text, "date_utc": datetime.now(timezone.utc).date().isoformat()}, planning=True, photo=photo)
@@ -263,6 +303,18 @@ async def pipeline(session, settings, kind, text, photo):
     report = await complete(session, settings,
         'Спочатку перевір головне питання користувача: воно має бути першим у claims. Решта — до чотирьох окремих тверджень. '
         'Дай summary: пряму коротку відповідь у 1–2 реченнях, без передмови. До кожного вердикту додай source_ids. '
+        'Відповідай на зміст оригінального запитання, не на підмінену версію. «Чи був президентом?» підтверджується минулим терміном, навіть якщо зараз людина не президент. '
+        'Для «чи є зараз?» дай поточний статус і, якщо релевантно, уточнення про минулу посаду та роки. '
+        'Якщо формулювання змішує «є» і «був», прямо розрізни обидва значення у summary: зараз — ..., раніше — ...; не обмежуйся словом «ні». '
+        'clarification.text — коротке важливе уточнення з датами, попереднім статусом або виправленим фактом; clarification.source_ids — прямі джерела цього уточнення. '
+        'Дати і виправлення бери тільки з наданих джерел. Якщо доречного підтвердженого уточнення немає, text="", source_ids=[]. '
+        'Розглянь будь-яке запитання з релевантних боків: правильність передумови, визначення понять, час і місце, умови та винятки, причини/наслідки, докази за і проти. '
+        'Не намагайся вмістити всі категорії формально: вибери ті, що реально змінюють відповідь. '
+        'considerations — до трьох суттєвих аспектів, кожен з angle (короткий заголовок), text (1–2 речення) і source_ids. '
+        'Включай лише підтверджений джерелами контекст; не повторюй summary чи clarification. Якщо додаткових аспектів немає, considerations=[]. '
+        'Якщо є суперечність між джерелами, поясни її і вагу доказів. Не став непідтверджені версії на один рівень з прямими доказами. '
+        'Для думок чи питання з неоднозначними умовами поясни залежність відповіді від цих умов; не перетворюй суб’єктивну оцінку на встановлений факт. '
+        'У limits прямо назви неперевірені аспекти та відсутній контекст; не заявляй, що перевірив абсолютно все. '
         'evidence=direct лише коли наведений текст джерела прямо підтверджує або прямо суперечить твердженню з урахуванням дати. '
         'Одного прямого актуального першоджерела може бути достатньо: не вимагай два сайти формально. '
         'Узгоджені незалежні повідомлення посилюють висновок; копії одного повідомлення — ні. '
@@ -270,7 +322,8 @@ async def pipeline(session, settings, kind, text, photo):
         'Сама відсутність результатів пошуку НЕ доводить неправдивість. Непрямі або відсутні докази: evidence=indirect/none, verdict=недостатньо даних. '
         'Не відмовляйся від чіткого вердикту лише через неперевірені другорядні деталі — переліч їх у limits. '
         'confidence: ціле 0–99, орієнтовна впевненість у конкретному вердикті, не ймовірність правдивості. Для неперевіреного — null. '
-        'Не додавай відсоток до summary. Пояснення до кожного твердження — 1–3 короткі речення. Поверни JSON за схемою.',
+        'Не додавай відсоток до summary. Уникай повторень між розділами; орієнтир — до 300 слів на весь звіт. '
+        'Пояснення до кожного твердження — 1–2 короткі речення. Поверни JSON за схемою.',
         {"material": text, "claims_to_check": claim,
          "sources": [{"id": source["id"], "title": source["title"], "domain": urlsplit(source["url"]).hostname,
                       "content": source["content"], "extracted": source["extracted"]} for source in sources], "limitations": note,

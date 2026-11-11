@@ -115,9 +115,9 @@ function renderCheck(item) {
   $("poll-error").hidden = true;
   $("resume-poll").hidden = true;
   if (secret) {
-    const question = item.result.easterEggText || item.title;
-    $("secret-question").textContent = question.slice(0,800);
-    const joke = item.result.joke || nazarJoke(question);
+    const question = item.originalQuestion || item.result.original_question || item.result.easterEggText || item.title;
+    $("secret-question").textContent = question;
+    const joke = item.result.joke || nazarJoke(item.result.easterEggText || question);
     $("secret-title").textContent = joke.title;
     $("secret-answer").textContent = joke.answer;
     return;
@@ -130,8 +130,39 @@ function renderCheck(item) {
   const result = item.result;
   const view = resultView(item);
   $("result-question").textContent = view.question;
+  $("question-caption").textContent = item.kind === "link" ? "Твоє посилання" : item.kind === "photo" && !item.originalQuestion && !result.original_question ? "Твердження з фото" : "Твоє запитання";
+  const checkedClaim = result.question || "";
+  $("checked-claim").hidden = !checkedClaim || checkedClaim.trim() === view.question.trim();
+  $("checked-claim").textContent = checkedClaim ? `Перевіряємо: ${checkedClaim}` : "";
   $("result-label").textContent = view.verdict;
   $("result-summary").textContent = view.summary;
+  const clarification = typeof result.clarification === "string" ? result.clarification : "";
+  $("clarification-card").hidden = !clarification;
+  $("clarification-text").textContent = clarification;
+  $("clarification-links").replaceChildren();
+  for (const source of result.clarification_sources || []) {
+    const url = safeLink(source.url);
+    if (!url) continue;
+    const anchor = linkTo(url, "inline-citation");
+    anchor.textContent = `[${source.id}]`;
+    $("clarification-links").append(anchor, document.createTextNode(" "));
+  }
+  const angles = Array.isArray(result.considerations) ? result.considerations.slice(0,3) : [];
+  $("considerations-card").hidden = !angles.length;
+  const angleList = document.createDocumentFragment();
+  for (const angle of angles) {
+    const section = element("section", "consideration");
+    section.append(element("h3", "", angle.angle), element("p", "", angle.text));
+    for (const source of angle.sources || []) {
+      const url = safeLink(source.url);
+      if (!url) continue;
+      const anchor = linkTo(url, "inline-citation");
+      anchor.textContent = `[${source.id}]`;
+      section.append(anchor, document.createTextNode(" "));
+    }
+    angleList.append(section);
+  }
+  $("considerations-list").replaceChildren(angleList);
   $("confidence-row").hidden = view.percent === null;
   $("score").textContent = view.percent === null ? "" : `${view.percent}%`;
   $("confidence-label").textContent = view.legacy ? "Попередня оцінка ризику маніпуляції" : "Оцінка впевненості у висновку";
@@ -179,7 +210,7 @@ function resultView(item) {
   const raw = legacy ? result.score : result.confidence;
   const percent = Number.isInteger(raw) && raw >= 0 && raw <= 100 ? raw : null;
   const tone = verdict === "Підтверджено" ? "low" : ["Спростовано", "Оманливо"].includes(verdict) ? "high" : "neutral";
-  return {question: result.question || item.title || "Матеріал перевірки", verdict, percent, tone, legacy,
+  return {question: item.originalQuestion || result.original_question || result.question || item.title || "Матеріал перевірки", verdict, percent, tone, legacy,
     summary: result.summary || "Це результат попередньої версії. Пояснення та джерела збережені нижче."};
 }
 
@@ -276,7 +307,7 @@ async function submit(event) {
   if (state.kind !== "photo" && !text) return formError("Спочатку додай матеріал.");
   if (state.kind === "link" && !safeLink(text)) return formError("Встав повне посилання з https:// або http://.");
   if (state.kind === "photo" && !state.photo) return formError("Спочатку обери фото.");
-  const item = {id:requestId(), kind:state.kind, title:text.replace(/\s+/g," ").slice(0,100) || "Перевірка фото",
+  const item = {id:requestId(), kind:state.kind, originalQuestion:text, title:text.replace(/\s+/g," ").slice(0,100) || "Перевірка фото",
     created_at:Math.floor(Date.now()/1000), status:"running", result:null, error:null};
   if (isNazarEasterEgg(text)) {
     item.status = "done";

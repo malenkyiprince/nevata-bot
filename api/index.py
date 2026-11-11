@@ -118,7 +118,8 @@ def create_app(settings=None, analyzer=analyze):
             raise HTTPException(400, "Додай коректний текст, посилання або фото JPEG/PNG/WebP до 3 МБ.") from None
         try:
             key = request_key(identity["id"], kind, text, photo)
-            return await inflight.run(key, lambda: analyzer(current, kind, text, photo))
+            result = await inflight.run(key, lambda: analyzer(current, kind, text, photo))
+            return {**result, "original_question": text}
         except BusyError:
             raise HTTPException(503, "Зараз багато перевірок. Спробуй трохи пізніше; новий API-запит не запускався.") from None
         except AnalysisError as error:
