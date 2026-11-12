@@ -155,4 +155,20 @@ textarea.link-input { min-height:105px; }
 .consideration+.consideration { margin-top:16px; border-top:1px solid var(--line); padding-top:16px; }
 .consideration h3 { font-size:15px; line-height:1.5; margin:0 0 6px; }
 .consideration p { font-size:14px; line-height:1.7; margin:0 0 6px; }
+.manipulation-card { --meter:#7450a3; margin:0 0 18px; border:1px solid var(--line); background:#fff; border-radius:23px; padding:23px; }
+.manipulation-card.low { --meter:#477d48; }.manipulation-card.medium { --meter:#a36a13; }.manipulation-card.high { --meter:#bd473f; }
+.manipulation-card>.eyebrow { color:var(--muted); font-size:10px; }
+.manipulation-card h2 { font-size:22px; line-height:1.3; margin:10px 0 15px; }
+.manipulation-heading { display:flex; align-items:center; gap:14px; color:var(--meter); }
+#manipulation-score { font-size:38px; line-height:1.1; letter-spacing:-1.5px; }
+#manipulation-label { font-weight:700; font-size:14px; }
+.manipulation-track { height:7px; background:#eee9f2; border-radius:10px; margin:15px 0; overflow:hidden; }
+#manipulation-bar { display:block; height:100%; background:var(--meter); border-radius:10px; }
+.manipulation-card p { font-size:13px; line-height:1.7; margin:9px 0; overflow-wrap:anywhere; }
+.manipulation-card h3 { font-size:14px; line-height:1.5; margin:17px 0 7px; }
+.manipulation-signal { border-top:1px solid var(--line); margin-top:16px; padding-top:2px; }
+.manipulation-signal blockquote { margin:8px 0; padding:9px 12px; border-left:3px solid #b794db; background:#f6f0fc; border-radius:0 10px 10px 0; font-size:14px; line-height:1.6; white-space:pre-wrap; overflow-wrap:anywhere; }
+.manipulation-card .manipulation-scope,.manipulation-card .manipulation-note { font-size:11px; color:var(--muted); }
+.manipulation-card details { border-top:1px solid var(--line); padding-top:12px; margin-top:16px; }
+.manipulation-card summary { font-size:12px; cursor:pointer; color:var(--purple); }
 @media(prefers-reduced-motion:reduce) { *,*::before,*::after { animation:none !important; transition:none !important; scroll-behavior:auto !important; } }

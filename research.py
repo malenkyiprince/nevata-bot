@@ -11,6 +11,7 @@ import aiohttp
 
 from validation import AnalysisError, safe_url
 from easter_egg import is_nazar, secret_result
+from manipulation import CRITERIA, RUBRIC, assess
 
 
 VERDICTS = {"підтверджено", "частково підтверджено", "оманливо", "спростовано", "недостатньо даних"}
@@ -22,13 +23,19 @@ def object_schema(properties):
 
 PLAN_SCHEMA = object_schema({"claim": {"type": "string"}, "queries": {"type": "array", "items": {"type": "string"}},
     "visible_text": {"type": "string"}})
+SIGNAL_SCHEMA = object_schema({"level": {"type": "integer", "enum": [0, 1, 2]}, "quote": {"type": "string"},
+    "reason": {"type": "string"}, "source_ids": {"type": "array", "items": {"type": "integer"}}})
+MANIPULATION_SCHEMA = object_schema({"criteria": object_schema({key: SIGNAL_SCHEMA for key, _, _ in CRITERIA}),
+    "summary": {"type": "string"}, "tone": {"type": "string"}, "subtext": {"type": "string"}, "neutral_rewrite": {"type": "string"}})
 REPORT_SCHEMA = object_schema({
     "summary": {"type": "string"},
+    "manipulation": MANIPULATION_SCHEMA,
     "clarification": object_schema({"text": {"type": "string"}, "source_ids": {"type": "array", "items": {"type": "integer"}}}),
     "considerations": {"type": "array", "items": object_schema({"angle": {"type": "string"}, "text": {"type": "string"},
         "source_ids": {"type": "array", "items": {"type": "integer"}}})},
     "claims": {"type": "array", "items": object_schema({
         "claim": {"type": "string"}, "verdict": {"type": "string", "enum": sorted(VERDICTS)},
+        "claim_type": {"type": "string", "enum": ["fact", "future_or_intent", "opinion"]},
         "explanation": {"type": "string"}, "source_ids": {"type": "array", "items": {"type": "integer"}},
         "evidence": {"type": "string", "enum": ["direct", "indirect", "none"]},
         "confidence": {"type": ["integer", "null"]}})},
@@ -188,22 +195,33 @@ def parse_report(data, sources, note=""):
         invalid = any(type(i) is not int or i not in by_id for i in ids)
         direct = claim.get("evidence") == "direct" and any(by_id[i]["extracted"] for i in valid)
         verdict = claim["verdict"]
+        future = claim.get("claim_type") == "future_or_intent"
+        opinion = claim.get("claim_type") == "opinion"
         # Один прямий доказ може спростувати твердження; кількість сайтів не є умовою.
         if invalid or not valid or not direct:
             verdict = "недостатньо даних"
+        if future:
+            verdict = "прогноз / намір"
+        elif opinion:
+            verdict = "оціночне судження"
         confidence = claim.get("confidence")
         if confidence is not None and (type(confidence) is not int or not 0 <= confidence <= 100):
             raise AnalysisError("Некоректна оцінка впевненості.")
-        if verdict == "недостатньо даних":
+        if verdict in {"недостатньо даних", "прогноз / намір", "оціночне судження"}:
             confidence = None
         # Не створюємо видимість абсолютної впевненості.
         if confidence is not None:
             confidence = min(confidence, 99)
         question = plain(claim.get("claim"), 800)
         explanation = plain(claim.get("explanation"), 1800, "Дивись наведені джерела; окремого пояснення модель не надала.")
-        if verdict != claim["verdict"]:
+        if future:
+            explanation = "Майбутню подію не можна спростувати лише відсутністю підтвердження. " + (
+                "Категоричне спростування моделі не прийнято як доказ того, що подія не відбудеться." if claim["verdict"] == "спростовано" else explanation)
+        elif opinion:
+            explanation = "Це оцінка, а не встановлюваний факт. " + explanation
+        elif verdict != claim["verdict"]:
             explanation = "Наведений висновок не має перевірених прямих посилань і не прийнятий як доведений. " + explanation
-        checked.append({"claim": question, "verdict": verdict.capitalize(), "confidence": confidence})
+        checked.append({"claim": question, "verdict": verdict.capitalize(), "confidence": confidence, "claim_type": claim.get("claim_type", "fact")})
         segments.append({"text": f"{index}. {question}\n{verdict.capitalize()}. {explanation} "})
         for source_id in valid:
             used.add(source_id)
@@ -211,10 +229,14 @@ def parse_report(data, sources, note=""):
         segments.append({"text": "\n\n"})
     main = checked[0]
     verdict = main["verdict"]
-    unknown = verdict == "Недостатньо даних"
+    unknown = verdict in {"Недостатньо даних", "Прогноз / намір", "Оціночне судження"}
     summary = plain(data.get("summary"), 500, checked[0]["verdict"] + ". " + plain(claims[0].get("explanation"), 400, "Переглянь джерела нижче."))
     if unknown:
         summary = "Не знайдено достатніх прямих доказів, щоб підтвердити або спростувати головне твердження. Це не означає, що воно неправдиве."
+    if main["claim_type"] == "future_or_intent":
+        summary = "Це запит про майбутню подію або намір. Публічні заяви можна перевірити, але вони не гарантують, що подія відбудеться або не відбудеться."
+    elif main["claim_type"] == "opinion":
+        summary = "Це оціночне судження. Його аргументи та фактичні передумови можна перевірити, але саму думку не слід подавати як доведений або спростований факт."
     limits = plain(data.get("limits"), 2000, "Перевірено лише наведені твердження та доступні уривки джерел.")
     clarification, clarification_sources = "", []
     extra = data.get("clarification")
@@ -281,11 +303,21 @@ async def pipeline(session, settings, kind, text, photo):
         'Використай до двох пошукових запитів для найсуттєвіших аспектів і можливих контрдоказів, не лише для підтвердження формулювання. '
         'Для фото спочатку прочитай видимий текст; якщо не читається, claim="", queries=[]. '
         'У visible_text дослівно перепиши видимий текст з фото (до 1600 символів), зберігай імена, не домислюй нерозбірливе. Без фото visible_text="". '
-        'Склади один або два короткі пошукові запити для доказів і контрдоказів. Поверни JSON за схемою.',
+        'Якщо це лише думка або заклик без перевірюваного факту, queries=[], claim — короткий опис матеріалу. '
+        'Інакше склади один або два короткі пошукові запити для доказів і контрдоказів. Поверни JSON за схемою.',
         {"material": text, "date_utc": datetime.now(timezone.utc).date().isoformat()}, planning=True, photo=photo)
     if photo and is_nazar(plan.get("visible_text")):
         return secret_result((text + "\n" + plan["visible_text"]).strip())
-    claim, queries = parse_plan(plan)
+    if isinstance(plan.get("queries"), list) and not plan["queries"]:
+        # Емоційний заклик або думку теж можна оцінити без вигаданого пошукового запиту.
+        claim = plan.get("claim") or "Матеріал без чіткого перевірюваного твердження"
+        if not isinstance(claim, str):
+            raise AnalysisError("Модель повернула некоректний план.")
+        claim = claim[:2500]
+        queries = []
+        note += " Чіткого перевірюваного факту не виділено; веб-пошук не виконувався."
+    else:
+        claim, queries = parse_plan(plan)
     results = await asyncio.gather(*(post_json(session, TAVILY_URL + "search", settings.search_key,
         {"query": query, "search_depth": "basic", "auto_parameters": False, "max_results": 5,
          "include_raw_content": "text", "include_answer": False, "topic": "general"}, "Tavily") for query in queries), return_exceptions=True)
@@ -296,12 +328,20 @@ async def pipeline(session, settings, kind, text, photo):
             raise error
         note += " Один із пошукових запитів не виконано; покриття неповне."
     sources = collect_sources(successful, original)
-    if not sources:
-        return {"version": 2, "question": claim, "verdict": "Не підтверджено", "summary": "У пошуку немає придатних доказів. Твердження не підтверджене; це не спростування.",
-            "confidence": None, "score": None, "label": "Не підтверджено", "limited": True, "sources": [],
-            "segments": [{"text": "Пошук не надав придатних джерел. Це не доводить неправдивість матеріалу.\nМежі перевірки: твердження не підтверджено і не спростовано."}]}
+    material = text
+    if photo:
+        visible = plan.get("visible_text")
+        material = visible.strip() if isinstance(visible, str) else ""
+        # Підпис не підміняє текст на зображенні.
+        if not material:
+            note += " Текст зображення не прочитано; подачу фото не оцінено."
     report = await complete(session, settings,
-        'Спочатку перевір головне питання користувача: воно має бути першим у claims. Решта — до чотирьох окремих тверджень. '
+        RUBRIC + '\nСпочатку перевір головне питання користувача: воно має бути першим у claims. Решта — до чотирьох окремих тверджень. '
+        'Для кожного claim визнач claim_type: fact, future_or_intent або opinion. '
+        'Запити про майбутні події, можливі напади, рішення чи приховані плани — future_or_intent. '
+        'Не називай майбутню подію спростованою через відсутність доказів. Відрізняй перевірену публічну заяву від прогнозу її виконання. '
+        'Якщо джерел немає, фактичні висновки — недостатньо даних, але подачу наявного тексту оцінюй за рубрикою. '
+        'Якщо матеріал — лише думка, емоційний заклик або риторика без перевірюваних фактів, створи один claim із claim_type=opinion і поясни це; не вигадуй фактичне твердження. '
         'Дай summary: пряму коротку відповідь у 1–2 реченнях, без передмови. До кожного вердикту додай source_ids. '
         'Відповідай на зміст оригінального запитання, не на підмінену версію. «Чи був президентом?» підтверджується минулим терміном, навіть якщо зараз людина не президент. '
         'Для «чи є зараз?» дай поточний статус і, якщо релевантно, уточнення про минулу посаду та роки. '
@@ -324,11 +364,23 @@ async def pipeline(session, settings, kind, text, photo):
         'confidence: ціле 0–99, орієнтовна впевненість у конкретному вердикті, не ймовірність правдивості. Для неперевіреного — null. '
         'Не додавай відсоток до summary. Уникай повторень між розділами; орієнтир — до 300 слів на весь звіт. '
         'Пояснення до кожного твердження — 1–2 короткі речення. Поверни JSON за схемою.',
-        {"material": text, "claims_to_check": claim,
+        {"material": material, "user_caption": text if photo else "", "claims_to_check": claim,
          "sources": [{"id": source["id"], "title": source["title"], "domain": urlsplit(source["url"]).hostname,
                       "content": source["content"], "extracted": source["extracted"]} for source in sources], "limitations": note,
          "date_utc": datetime.now(timezone.utc).date().isoformat()})
-    return parse_report(report, sources, note)
+    result = parse_report(report, sources, note)
+    result["manipulation"] = assess(report.get("manipulation"), material, sources)
+    result["manipulation"]["scope"] = "Розпізнаний текст фото" if photo else "Перші 4000 символів сторінки" if kind == "link" else "Текст твого запиту"
+    result["manipulation"]["scope_note"] = "Оцінено лише прочитаний уривок; решта тексту й візуальна композиція не перевірені." if photo or kind == "link" else "Якщо це твоє запитання, оцінюється його формулювання, а не невідомий текст новини."
+    # Додаємо зовнішні джерела, потрібні для пояснення викривленого контексту.
+    linked = {source["url"] for source in result["sources"]}
+    for signal in result["manipulation"]["signals"]:
+        for ref in signal["sources"]:
+            if ref["url"] not in linked:
+                source = next(item for item in sources if item["id"] == ref["id"])
+                result["sources"].append({"id": source["id"], "title": source["title"], "url": source["url"]})
+                linked.add(ref["url"])
+    return result
 
 
 async def analyze(settings, kind, text, photo=None):

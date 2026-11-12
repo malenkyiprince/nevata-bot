@@ -18,7 +18,7 @@ class Settings:
     model: str = "openai/gpt-oss-120b"
     vision_model: str = "qwen/qwen3.8-27b"
     timeout: int = 180
-    max_tokens: int = 2200
+    max_tokens: int = 3200
     allowed_users: str = ""
     preview: bool = False
 

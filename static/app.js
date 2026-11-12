@@ -136,6 +136,7 @@ function renderCheck(item) {
   $("checked-claim").textContent = checkedClaim ? `Перевіряємо: ${checkedClaim}` : "";
   $("result-label").textContent = view.verdict;
   $("result-summary").textContent = view.summary;
+  renderManipulation(result.manipulation);
   const clarification = typeof result.clarification === "string" ? result.clarification : "";
   $("clarification-card").hidden = !clarification;
   $("clarification-text").textContent = clarification;
@@ -165,7 +166,7 @@ function renderCheck(item) {
   $("considerations-list").replaceChildren(angleList);
   $("confidence-row").hidden = view.percent === null;
   $("score").textContent = view.percent === null ? "" : `${view.percent}%`;
-  $("confidence-label").textContent = view.legacy ? "Попередня оцінка ризику маніпуляції" : "Оцінка впевненості у висновку";
+  $("confidence-label").textContent = view.legacy ? "Попередня оцінка ризику маніпуляції" : "Упевненість у фактчеку";
   $("score-note").textContent = view.percent === null ? "Відсоток не визначено: дивись докази й обмеження нижче." : "Орієнтовна оцінка моделі, не виміряна ймовірність істини.";
   $("verdict-card").className = `verdict-card ${view.tone}`;
   const mascot = $("result-mascot");
@@ -212,6 +213,36 @@ function resultView(item) {
   const tone = verdict === "Підтверджено" ? "low" : ["Спростовано", "Оманливо"].includes(verdict) ? "high" : "neutral";
   return {question: item.originalQuestion || result.original_question || result.question || item.title || "Матеріал перевірки", verdict, percent, tone, legacy,
     summary: result.summary || "Це результат попередньої версії. Пояснення та джерела збережені нижче."};
+}
+
+function renderManipulation(value) {
+  const m = value && typeof value === "object" ? value : {};
+  const score = Number.isInteger(m.score) && m.score >= 0 && m.score <= 100 ? m.score : null;
+  $("manipulation-score").textContent = score === null ? "—" : `${score}%`;
+  $("manipulation-label").textContent = score === null ? "Не оцінено" : m.label || "Індекс ознак";
+  $("manipulation-card").className = `manipulation-card ${score === null ? "unknown" : score >= 65 ? "high" : score >= 30 ? "medium" : "low"}`;
+  $("manipulation-bar").style.width = `${score === null ? 0 : score}%`;
+  $("manipulation-summary").textContent = m.summary || "У цій старій перевірці подачу окремо не оцінювали. Запусти нову перевірку.";
+  $("manipulation-scope").textContent = [m.scope,m.scope_note].filter(Boolean).join(". ");
+  const fragment = document.createDocumentFragment();
+  for (const signal of (Array.isArray(m.signals) ? m.signals : []).slice(0,5)) {
+    const row = element("section", "manipulation-signal");
+    row.append(element("h3", "", signal.criterion), element("blockquote", "", signal.quote), element("p", "", signal.reason));
+    for (const source of signal.sources || []) {
+      const url = safeLink(source.url);
+      if (!url) continue;
+      const anchor = linkTo(url, "inline-citation"); anchor.textContent = `[${source.id}]`;
+      row.append(anchor,document.createTextNode(" "));
+    }
+    fragment.append(row);
+  }
+  $("manipulation-signals").replaceChildren(fragment);
+  $("emotional-context").hidden = !m.tone && !m.subtext;
+  $("emotional-tone").textContent = m.tone || "";
+  $("emotional-subtext").textContent = m.subtext || "";
+  $("neutral-version").hidden = !m.neutral_rewrite;
+  $("neutral-text").textContent = m.neutral_rewrite || "";
+  $("manipulation-note").textContent = m.note || "Без відсотка це не нульова маніпулятивність: оцінку не отримано.";
 }
 
 function selectPhoto() {
