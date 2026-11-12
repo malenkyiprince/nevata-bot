@@ -22,7 +22,8 @@ def object_schema(properties):
 
 
 PLAN_SCHEMA = object_schema({"claim": {"type": "string"}, "queries": {"type": "array", "items": {"type": "string"}},
-    "visible_text": {"type": "string"}})
+    "visible_text": {"type": "string"},
+    "people": {"type": "array", "items": {"type": "string"}}})
 SIGNAL_SCHEMA = object_schema({"level": {"type": "integer", "enum": [0, 1, 2]}, "quote": {"type": "string"},
     "reason": {"type": "string"}, "source_ids": {"type": "array", "items": {"type": "integer"}}})
 MANIPULATION_SCHEMA = object_schema({"criteria": object_schema({key: SIGNAL_SCHEMA for key, _, _ in CRITERIA}),
@@ -36,6 +37,7 @@ REPORT_SCHEMA = object_schema({
     "claims": {"type": "array", "items": object_schema({
         "claim": {"type": "string"}, "verdict": {"type": "string", "enum": sorted(VERDICTS)},
         "claim_type": {"type": "string", "enum": ["fact", "future_or_intent", "opinion"]},
+        "identity_match": {"type": "string", "enum": ["verified", "uncertain", "different", "not_applicable"]},
         "explanation": {"type": "string"}, "source_ids": {"type": "array", "items": {"type": "integer"}},
         "evidence": {"type": "string", "enum": ["direct", "indirect", "none"]},
         "confidence": {"type": ["integer", "null"]}})},
@@ -169,6 +171,28 @@ def collect_sources(results, original=None):
 
 
 
+def person_matches(name, content):
+    """Conservative lexical gate, not proof that namesakes are identical."""
+    words = re.findall(r"[^\W\d_]+", name.casefold(), re.UNICODE)
+    if not words:
+        return False
+    # Allow common case endings, but require every part of the supplied name nearby.
+    roots = [word[:-1] if len(word) >= 5 else word for word in words]
+    tokens = list(re.finditer(r"[^\W\d_]+", content.casefold(), re.UNICODE))
+    for token in tokens:
+        window = content.casefold()[max(0, token.start()-100):token.end()+100]
+        nearby = re.findall(r"[^\W\d_]+", window, re.UNICODE)
+        if all(any(word.startswith(root) for word in nearby) for root in roots):
+            return True
+    return False
+
+
+def filter_people_sources(sources, people):
+    if not people:
+        return sources
+    return [source for source in sources if any(person_matches(name, source["content"]) for name in people)]
+
+
 def plain(value, limit, default=""):
     if not isinstance(value, str) or not value.strip():
         if default:
@@ -193,6 +217,9 @@ def parse_report(data, sources, note=""):
             raise AnalysisError("Некоректні посилання моделі.")
         valid = list(dict.fromkeys(i for i in ids if type(i) is int and i in by_id))[:5]
         invalid = any(type(i) is not int or i not in by_id for i in ids)
+        if claim.get("identity_match") in {"uncertain", "different"}:
+            valid = []
+            invalid = True
         direct = claim.get("evidence") == "direct" and any(by_id[i]["extracted"] for i in valid)
         verdict = claim["verdict"]
         future = claim.get("claim_type") == "future_or_intent"
@@ -220,7 +247,8 @@ def parse_report(data, sources, note=""):
         elif opinion:
             explanation = "Це оцінка, а не встановлюваний факт. " + explanation
         elif verdict != claim["verdict"]:
-            explanation = "Наведений висновок не має перевірених прямих посилань і не прийнятий як доведений. " + explanation
+            explanation = "Не знайдено прямих доказів саме для цього твердження та цієї особи або об’єкта. Відомості про інших людей чи схожі випадки не підтверджують його. Якщо йдеться про людину, додай посилання на її профіль або уточни повне ім’я та контекст."
+            valid = []
         checked.append({"claim": question, "verdict": verdict.capitalize(), "confidence": confidence, "claim_type": claim.get("claim_type", "fact")})
         segments.append({"text": f"{index}. {question}\n{verdict.capitalize()}. {explanation} "})
         for source_id in valid:
@@ -299,6 +327,8 @@ async def pipeline(session, settings, kind, text, photo):
     plan = await complete(session, settings,
         'Виділи до п’яти ключових перевірюваних тверджень у claim. Збережи часовий зміст запитання: «чи був» — про минуле, «чи є зараз» — про теперішнє. '
         'Не підміняй історичне запитання перевіркою поточної посади. Якщо час неоднозначний або змішаний, шукай і поточний статус, і попередній період. '
+        'У people дослівно перенеси повні імена людей з матеріалу без підміни чи доповнення прізвища. Якщо людей немає, people=[]. '
+        'У пошукових запитах збережи всі частини імені, використовуй лапки для точного імені. Не замінюй маловідому людину відомою зі схожим ім’ям. '
         'Для будь-якої теми визнач передумову, неоднозначні терміни та найважливіші різні аспекти. '
         'Використай до двох пошукових запитів для найсуттєвіших аспектів і можливих контрдоказів, не лише для підтвердження формулювання. '
         'Для фото спочатку прочитай видимий текст; якщо не читається, claim="", queries=[]. '
@@ -318,6 +348,11 @@ async def pipeline(session, settings, kind, text, photo):
         note += " Чіткого перевірюваного факту не виділено; веб-пошук не виконувався."
     else:
         claim, queries = parse_plan(plan)
+    # Keep the person's full name even if the planner broadens the query.
+    people_for_search = plan.get("people", [])
+    if isinstance(people_for_search, list):
+        queries = [(query + " " + " ".join('"' + name.replace('"', '') + '"' for name in people_for_search
+                   if isinstance(name, str) and not person_matches(name, query))).strip() for query in queries]
     results = await asyncio.gather(*(post_json(session, TAVILY_URL + "search", settings.search_key,
         {"query": query, "search_depth": "basic", "auto_parameters": False, "max_results": 5,
          "include_raw_content": "text", "include_answer": False, "topic": "general"}, "Tavily") for query in queries), return_exceptions=True)
@@ -328,6 +363,17 @@ async def pipeline(session, settings, kind, text, photo):
             raise error
         note += " Один із пошукових запитів не виконано; покриття неповне."
     sources = collect_sources(successful, original)
+    people = plan.get("people", [])
+    if not isinstance(people, list) or any(not isinstance(name, str) or not name.strip() for name in people):
+        raise AnalysisError("Не вдалося визначити особу. Уточни повне ім’я або додай посилання на профіль.")
+    # Only literal names from the submitted material/OCR may become search subjects.
+    original_material = plan.get("visible_text", "") if photo else text
+    if any(not person_matches(name, original_material) for name in people):
+        raise AnalysisError("Модель змінила ім’я людини. Уточни ім’я або додай посилання на профіль.")
+    filtered = filter_people_sources(sources, people)
+    if len(filtered) != len(sources):
+        note += " Джерела без повного імені потрібної особи у прочитаному уривку відкинуто."
+    sources = filtered
     material = text
     if photo:
         visible = plan.get("visible_text")
@@ -336,7 +382,9 @@ async def pipeline(session, settings, kind, text, photo):
         if not material:
             note += " Текст зображення не прочитано; подачу фото не оцінено."
     report = await complete(session, settings,
-        RUBRIC + '\nСпочатку перевір головне питання користувача: воно має бути першим у claims. Решта — до чотирьох окремих тверджень. '
+        RUBRIC + '\nПеревір тотожність осіб: однакове ім’я або прізвище не означає ту саму людину. Порівняй повне ім’я, посаду, місце, дати й біографію лише коли вони відомі. Не вигадуй відсутні ознаки. Якщо тезок не можна розрізнити, evidence=none, verdict=недостатньо даних; попроси профіль чи уточнення у поясненні. Не переказуй біографію іншої людини. Для кожного source_id переконайся, що джерело стосується саме особи у цьому claim, а не лише іншого учасника матеріалу. '
+        'Спочатку перевір головне питання користувача: воно має бути першим у claims. Решта — до чотирьох окремих тверджень. '
+        'Для кожного claim identity_match=verified лише коли джерела дозволяють встановити ту саму особу; uncertain для нерозрізнених тезок, different для іншої людини, not_applicable якщо твердження не про людину. '
         'Для кожного claim визнач claim_type: fact, future_or_intent або opinion. '
         'Запити про майбутні події, можливі напади, рішення чи приховані плани — future_or_intent. '
         'Не називай майбутню подію спростованою через відсутність доказів. Відрізняй перевірену публічну заяву від прогнозу її виконання. '
@@ -364,7 +412,7 @@ async def pipeline(session, settings, kind, text, photo):
         'confidence: ціле 0–99, орієнтовна впевненість у конкретному вердикті, не ймовірність правдивості. Для неперевіреного — null. '
         'Не додавай відсоток до summary. Уникай повторень між розділами; орієнтир — до 300 слів на весь звіт. '
         'Пояснення до кожного твердження — 1–2 короткі речення. Поверни JSON за схемою.',
-        {"material": material, "user_caption": text if photo else "", "claims_to_check": claim,
+        {"material": material, "user_caption": text if photo else "", "claims_to_check": claim, "people_to_verify": people,
          "sources": [{"id": source["id"], "title": source["title"], "domain": urlsplit(source["url"]).hostname,
                       "content": source["content"], "extracted": source["extracted"]} for source in sources], "limitations": note,
          "date_utc": datetime.now(timezone.utc).date().isoformat()})
